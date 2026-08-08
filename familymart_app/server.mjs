@@ -148,39 +148,58 @@ app.get("/api/avatars", async (req, res) => {
 
     let selectedList = [];
 
-    // Male Avatars M1 - M4
-    if (exactM1) selectedList.push({ id: exactM1.avatar_id || exactM1.id, name: `M1 (${exactM1.name})` });
-    if (exactM2) selectedList.push({ id: exactM2.avatar_id || exactM2.id, name: `M2 (${exactM2.name})` });
-    if (exactM3) selectedList.push({ id: exactM3.avatar_id || exactM3.id, name: `M3 (${exactM3.name})` });
+    // Format Male Avatars M1 - M4 with friendly character names
+    const getMaleName = (item, defaultCode, defaultName) => {
+      if (!item) return `${defaultCode} - ${defaultName}`;
+      const rawName = item.name || "";
+      if (/ren/i.test(rawName)) return `${defaultCode} - Ren`;
+      if (/ken/i.test(rawName)) return `${defaultCode} - Ken`;
+      if (/taro/i.test(rawName)) return `${defaultCode} - Taro`;
+      if (/sora/i.test(rawName)) return `${defaultCode} - Sora`;
+      return `${defaultCode} - ${defaultName}`;
+    };
+
+    if (exactM1) selectedList.push({ id: exactM1.avatar_id || exactM1.id, name: getMaleName(exactM1, "M1", "Ren") });
+    if (exactM2) selectedList.push({ id: exactM2.avatar_id || exactM2.id, name: getMaleName(exactM2, "M2", "Ken") });
+    if (exactM3) selectedList.push({ id: exactM3.avatar_id || exactM3.id, name: getMaleName(exactM3, "M3", "Taro") });
     if (exactM4) {
-      selectedList.push({ id: exactM4.avatar_id || exactM4.id, name: `M4 (${exactM4.name})` });
+      selectedList.push({ id: exactM4.avatar_id || exactM4.id, name: getMaleName(exactM4, "M4", "Sora") });
     } else {
-      selectedList.push({ id: selectedList[0]?.id || "m4", name: `M4 (M4)` });
+      selectedList.push({ id: selectedList[0]?.id || "m4", name: "M4 - Sora" });
     }
 
-    // Female Avatars F1 - F3
+    // Format Female Avatars F1 - F3 with friendly character names
+    const getFemaleName = (item, defaultCode, defaultName) => {
+      if (!item) return `${defaultCode} - ${defaultName}`;
+      const rawName = item.name || "";
+      if (/yuki/i.test(rawName)) return `${defaultCode} - Yuki`;
+      if (/hana/i.test(rawName)) return `${defaultCode} - Hana`;
+      if (/mio/i.test(rawName)) return `${defaultCode} - Mio`;
+      return `${defaultCode} - ${defaultName}`;
+    };
+
     if (exactF1) {
-      selectedList.push({ id: exactF1.avatar_id || exactF1.id, name: `F1 (${exactF1.name})` });
+      selectedList.push({ id: exactF1.avatar_id || exactF1.id, name: getFemaleName(exactF1, "F1", "Yuki") });
     } else if (femaleAvatars[0]) {
-      selectedList.push({ id: femaleAvatars[0].avatar_id || femaleAvatars[0].id, name: `F1 (${femaleAvatars[0].name})` });
+      selectedList.push({ id: femaleAvatars[0].avatar_id || femaleAvatars[0].id, name: getFemaleName(femaleAvatars[0], "F1", "Yuki") });
     } else {
-      selectedList.push({ id: selectedList[0]?.id || "f1", name: `F1 (F1 - Yuki)` });
+      selectedList.push({ id: selectedList[0]?.id || "f1", name: "F1 - Yuki" });
     }
 
     if (exactF2) {
-      selectedList.push({ id: exactF2.avatar_id || exactF2.id, name: `F2 (${exactF2.name})` });
+      selectedList.push({ id: exactF2.avatar_id || exactF2.id, name: getFemaleName(exactF2, "F2", "Hana") });
     } else if (femaleAvatars[1]) {
-      selectedList.push({ id: femaleAvatars[1].avatar_id || femaleAvatars[1].id, name: `F2 (${femaleAvatars[1].name})` });
+      selectedList.push({ id: femaleAvatars[1].avatar_id || femaleAvatars[1].id, name: getFemaleName(femaleAvatars[1], "F2", "Hana") });
     } else {
-      selectedList.push({ id: selectedList[1]?.id || "f2", name: `F2 (F2 - Hana)` });
+      selectedList.push({ id: selectedList[1]?.id || "f2", name: "F2 - Hana" });
     }
 
     if (exactF3) {
-      selectedList.push({ id: exactF3.avatar_id || exactF3.id, name: `F3 (${exactF3.name})` });
+      selectedList.push({ id: exactF3.avatar_id || exactF3.id, name: getFemaleName(exactF3, "F3", "Mio") });
     } else if (femaleAvatars[2]) {
-      selectedList.push({ id: femaleAvatars[2].avatar_id || femaleAvatars[2].id, name: `F3 (${femaleAvatars[2].name})` });
+      selectedList.push({ id: femaleAvatars[2].avatar_id || femaleAvatars[2].id, name: getFemaleName(femaleAvatars[2], "F3", "Mio") });
     } else {
-      selectedList.push({ id: selectedList[2]?.id || "f3", name: `F3 (F3 - Mio)` });
+      selectedList.push({ id: selectedList[2]?.id || "f3", name: "F3 - Mio" });
     }
 
     res.json({ items: selectedList });
@@ -190,33 +209,49 @@ app.get("/api/avatars", async (req, res) => {
   }
 });
 
-// Restrict Store Scene strictly to FamilyMart Convenience Store background
+// Filter & Return sova_Abstract_4 Scene
 app.get("/api/scenes", async (req, res) => {
   if (isMock) return res.json({ items: MOCK_SCENES });
   try {
     const token = await getPerxonaToken();
-    const upstreamRes = await fetch(`${PERXONA_API_BASE_URL}/api/v1/connect/assets/scenes`, {
+    const upstreamRes = await fetch(`${PERXONA_API_BASE_URL}/api/v1/connect/assets/scenes?size=100`, {
       headers: { Authorization: `Bearer ${token}` }
     });
     if (!upstreamRes.ok) throw new Error(`Upstream scenes returned ${upstreamRes.status}`);
     const data = await upstreamRes.json();
     const rawItems = data.items || [];
 
-    // Filter scenes for FamilyMart / Store / Counter / Market themes
-    const storeScenes = rawItems.filter(s => {
-      const name = (s.name || "").toLowerCase();
-      const desc = (s.description || "").toLowerCase();
-      return name.includes("familymart") || name.includes("store") || name.includes("counter") || name.includes("market") || name.includes("shop") || desc.includes("store") || desc.includes("convenience");
+    // Log all available scenes for debugging
+    console.log("[Scenes] Available:", rawItems.map(s => ({ id: s.scene_id || s.id, name: s.name })));
+
+    // Find EXACTLY sova_Abstract_4 — strict match, no partial/regex
+    const EXACT_TARGET = "sova_Abstract_4";
+    const abstract4Scene = rawItems.find(s => {
+      const name = (s.name || "").trim();
+      const sid = (s.scene_id || s.id || "").trim();
+      return name === EXACT_TARGET || sid === EXACT_TARGET;
     });
 
-    const finalScenes = storeScenes.length > 0 ? storeScenes : rawItems.slice(0, 1);
-    const items = finalScenes.map(({ scene_id, ...rest }) => ({
-      id: scene_id || rest.id,
-      name: rest.name && rest.name.toLowerCase().includes("familymart") ? rest.name : `🏪 FamilyMart Convenience Store Stage (${rest.name || "Counter"})`,
-      ...rest
-    }));
+    if (abstract4Scene) {
+      console.log("[Scenes] ✅ Found exact match:", abstract4Scene.name, "id:", abstract4Scene.scene_id || abstract4Scene.id);
+    } else {
+      console.log("[Scenes] ⚠️ sova_Abstract_4 not found by exact name. Listing close matches:");
+      rawItems.filter(s => (s.name || "").toLowerCase().includes("abstract")).forEach(s =>
+        console.log("  -", s.name, "id:", s.scene_id || s.id)
+      );
+    }
 
-    res.json({ items });
+    const targetScene = abstract4Scene || rawItems[0] || { id: "sova_Abstract_4", name: "sova_Abstract_4" };
+
+    res.json({
+      items: [
+        {
+          id: targetScene.scene_id || targetScene.id || "sova_Abstract_4",
+          name: `sova_Abstract_4 (${targetScene.name || "Abstract Studio 4"})`,
+          ...targetScene
+        }
+      ]
+    });
   } catch (err) {
     console.error("Scenes proxy error:", err);
     res.status(500).json({ error: err.message });

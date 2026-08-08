@@ -43,6 +43,17 @@ function getVoiceIdForAvatar() {
   return "01KY40Z9NS5BEHECTYMBVX909M";
 }
 
+// Get current avatar clerk display name from the dropdown
+function getCurrentClerkName() {
+  if (!avatarSelect) return "Clerk";
+  const selectedText = avatarSelect.options[avatarSelect.selectedIndex]?.text || "";
+  // Extract a friendly name: e.g. "M4 - Sora" → "Sora", "F2 - Hana" → "Hana"
+  const match = selectedText.match(/[-–—]\s*(.+)/); 
+  if (match) return match[1].trim();
+  // Fallback: use the full option text or "Clerk"
+  return selectedText.trim() || "Clerk";
+}
+
 const chatForm = document.getElementById("chat-form");
 const chatInput = document.getElementById("chat-input");
 const chatLog = document.getElementById("chat-log");
@@ -316,10 +327,6 @@ presenter.addEventListener("PRESENTER_STATUS", (e) => {
     statusBadge.style.color = "#ffffff";
     stageOverlay.classList.add("hidden");
     presenter.hidden = false;
-    
-    // Ensure transparent WebGL canvas & apply active backdrop!
-    makePresenterCanvasTransparent();
-    applyStageBackdrop();
   } else {
     statusBadge.textContent = status;
     statusBadge.style.backgroundColor = "#FFD100";
@@ -501,7 +508,7 @@ async function sendChatMessage(message) {
             if (delta) {
               fullText += delta;
               sentenceBuffer += delta;
-              assistantBubble.innerHTML = `<strong>Taro-san:</strong> ${escapeHtml(fullText)}`;
+              assistantBubble.innerHTML = `<strong>${escapeHtml(getCurrentClerkName())}:</strong> ${escapeHtml(fullText)}`;
               chatLog.scrollTop = chatLog.scrollHeight;
 
               // Check if a sentence punctuation boundary is reached
@@ -570,7 +577,7 @@ function createAssistantMessageBubble() {
 
   const bubble = document.createElement("div");
   bubble.className = "message-bubble";
-  bubble.innerHTML = `<strong>Taro-san:</strong> 💬 <em>Thinking...</em>`;
+  bubble.innerHTML = `<strong>${escapeHtml(getCurrentClerkName())}:</strong> 💬 <em>Thinking...</em>`;
 
   msgDiv.appendChild(bubble);
   chatLog.appendChild(msgDiv);
@@ -586,7 +593,7 @@ function appendChatMessage(text, role) {
   bubble.className = "message-bubble";
   
   if (role === "assistant") {
-    bubble.innerHTML = `<strong>Taro-san:</strong> ${escapeHtml(text)}`;
+    bubble.innerHTML = `<strong>${escapeHtml(getCurrentClerkName())}:</strong> ${escapeHtml(text)}`;
   } else if (role === "user") {
     bubble.textContent = text;
   } else {
