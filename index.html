@@ -162,7 +162,8 @@
 
     .debug-row strong { color: #fff; }
 
-    .stability-track {
+    .movement-track {
+      position: relative;
       width: 100%;
       height: 8px;
       background: #333;
@@ -171,47 +172,24 @@
       margin: 4px 0 10px 0;
     }
 
-    #stability-fill {
-      height: 100%;
+    .movement-track::after {
+      content: "";
+      position: absolute;
+      left: 50%;
+      top: 0;
+      bottom: 0;
+      width: 2px;
+      background: #555;
+    }
+
+    #movement-fill {
+      position: absolute;
+      top: 0;
+      bottom: 0;
+      left: 50%;
       width: 0%;
       background: linear-gradient(90deg, #00acc1, #66bb6a);
-      transition: width 0.08s linear;
-    }
-
-    .candidate-row {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      margin-bottom: 6px;
-    }
-
-    .candidate-label {
-      width: 90px;
-      font-size: 12px;
-      color: #cccccc;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
-    }
-
-    .candidate-track {
-      flex: 1;
-      height: 6px;
-      background: #333;
-      border-radius: 3px;
-      overflow: hidden;
-    }
-
-    .candidate-fill {
-      height: 100%;
-      background: #7c4dff;
-    }
-
-    .candidate-score {
-      width: 34px;
-      font-size: 11px;
-      color: #999;
-      text-align: right;
+      transition: width 0.08s linear, left 0.08s linear;
     }
 
     label.toggle {
@@ -284,30 +262,30 @@
     const MODEL_URL =
       "https://storage.googleapis.com/mediapipe-models/gesture_recognizer/gesture_recognizer/float16/1/gesture_recognizer.task";
     const CAMERA_CONSTRAINTS = { width: { ideal: 640 }, height: { ideal: 480 } };
-    const MIN_CONFIDENCE = 0.65; // ignore classifications below this score
-    const STABILITY_FRAMES = 6; // consecutive agreeing frames required before swapping (~150-250ms)
+    // Still needed even though we no longer read gesture *classifications* below
+    // — these gate how confidently the model must find/track a hand at all
+    // before it hands back landmarks for swipe tracking to use.
     const HAND_DETECTION_CONFIDENCE = 0.6;
     const HAND_PRESENCE_CONFIDENCE = 0.6;
     const TRACKING_CONFIDENCE = 0.6;
 
-    // Swipe detection is motion-based (palm x-position over time), not a pose
-    // MediaPipe classifies — it works alongside the static gestures below with
-    // any hand shape. Distance/duration are in normalized-x / milliseconds, not
-    // frame counts, so detection stays consistent whether the loop runs at 10fps
-    // or 60fps (headless-CPU vs. a real GPU browser) — that's the "flexible" part.
+    // The only supported gesture is motion: swipe left/right to cycle avatars.
+    // MediaPipe's static pose classification (Victory/Open_Palm/Thumb_Up/...) is
+    // intentionally unused — swipe tracks palm x-position over time instead, so
+    // it works with any hand shape. Distance/duration are in normalized-x /
+    // milliseconds, not frame counts, so detection stays consistent whether the
+    // loop runs at 10fps or 60fps (headless-CPU vs. a real GPU browser).
     const SWIPE_MIN_DISTANCE = 0.18; // normalized horizontal travel required to count as a swipe
     const SWIPE_WINDOW_MS = 500; // how far back we look when measuring that travel
     const SWIPE_MIN_DURATION_MS = 120; // minimum time span covered, so single-frame jitter can't trigger it
     const SWIPE_COOLDOWN_MS = 700; // minimum gap between two swipe triggers
 
-    const MOCK_AVATARS = {
-      Victory: { id: "agent_vtuber_01", label: "VTuber Clerk", emoji: "✌️", class: "vtuber" },
-      Open_Palm: { id: "agent_classic_01", label: "Classic Clerk", emoji: "🖐️", class: "classic" },
-      Thumb_Up: { id: "agent_mecha_01", label: "Cyber Robot", emoji: "👍", class: "mecha" },
-    };
-
     // Swipe right/left cycles forward/backward through this order.
-    const AVATAR_CYCLE = [MOCK_AVATARS.Open_Palm, MOCK_AVATARS.Victory, MOCK_AVATARS.Thumb_Up];
+    const AVATAR_CYCLE = [
+      { id: "agent_classic_01", label: "Classic Clerk", emoji: "🖐️", class: "classic" },
+      { id: "agent_vtuber_01", label: "VTuber Clerk", emoji: "✌️", class: "vtuber" },
+      { id: "agent_mecha_01", label: "Cyber Robot", emoji: "👍", class: "mecha" },
+    ];
 
     let gestureRecognizer = null;
     let video = null;
@@ -318,10 +296,6 @@
     let rafId = null;
     let lastTimestampMs = 0;
     let showLandmarks = true;
-
-    // Temporal debounce state
-    let pendingGesture = null;
-    let pendingCount = 0;
 
     // Swipe tracking state
     let swipeHistory = []; // { t, x } palm-center samples, oldest first
@@ -347,11 +321,9 @@
       els.kioskMock = document.getElementById("kiosk-mock");
       els.currentGesture = document.getElementById("current-gesture");
       els.fpsValue = document.getElementById("fps-value");
-      els.stabilityFill = document.getElementById("stability-fill");
-      els.stabilityLabel = document.getElementById("stability-label");
-      els.candidateList = document.getElementById("candidate-list");
+      els.movementFill = document.getElementById("movement-fill");
+      els.movementLabel = document.getElementById("movement-label");
       els.landmarkToggle = document.getElementById("landmark-toggle");
-      els.minConfidenceLabel = document.getElementById("min-confidence-label");
       els.swipeIndicator = document.getElementById("swipe-indicator");
     }
 
@@ -468,66 +440,8 @@
       }
 
       drawLandmarks(results);
-      handleGestureResult(results);
       handleSwipeTracking(results, now);
       trackFps();
-    }
-
-    function handleGestureResult(results) {
-      const candidates = results.gestures.length > 0 ? results.gestures[0] : [];
-      renderCandidates(candidates);
-
-      const top = candidates[0];
-      const name = top?.categoryName;
-      const score = top?.score ?? 0;
-
-      const isConfident = name && score >= MIN_CONFIDENCE && MOCK_AVATARS[name];
-
-      if (!isConfident) {
-        pendingGesture = null;
-        pendingCount = 0;
-        updateStabilityUI(0);
-        return;
-      }
-
-      if (name === pendingGesture) {
-        pendingCount++;
-      } else {
-        pendingGesture = name;
-        pendingCount = 1;
-      }
-
-      updateStabilityUI(pendingCount / STABILITY_FRAMES);
-
-      if (pendingCount >= STABILITY_FRAMES && MOCK_AVATARS[name].id !== currentAgent) {
-        updateMockAvatar(MOCK_AVATARS[name]);
-        pendingCount = 0;
-      }
-    }
-
-    function renderCandidates(candidates) {
-      if (candidates.length === 0) {
-        els.candidateList.innerHTML = '<div class="debug-row">No hand detected</div>';
-        return;
-      }
-      const top3 = candidates.slice(0, 3);
-      els.candidateList.innerHTML = top3
-        .map((c) => {
-          const pct = Math.round(c.score * 100);
-          return `
-            <div class="candidate-row">
-              <span class="candidate-label">${c.categoryName}</span>
-              <span class="candidate-track"><span class="candidate-fill" style="width:${pct}%"></span></span>
-              <span class="candidate-score">${pct}%</span>
-            </div>`;
-        })
-        .join("");
-    }
-
-    function updateStabilityUI(fraction) {
-      const pct = Math.min(100, Math.max(0, fraction * 100));
-      els.stabilityFill.style.width = `${pct}%`;
-      els.stabilityLabel.textContent = pendingGesture ? `Locking: ${pendingGesture}` : "Stability";
     }
 
     // Average of wrist + all four knuckle (MCP) landmarks — cancels out most of
@@ -542,6 +456,18 @@
 
     // Pure function — no DOM/module state — so it can be unit-tested standalone.
     // history: [{ t, x }, ...] oldest first, in the same time units as `now`.
+    // Returns the net x travel and time span covered by whatever's still inside
+    // the rolling window; { dx: 0, duration: 0 } if there isn't enough history.
+    function windowedDelta(history, now, windowMs) {
+      const windowStart = now - windowMs;
+      const inWindow = history.filter((p) => p.t >= windowStart);
+      if (inWindow.length < 2) return { dx: 0, duration: 0 };
+      const first = inWindow[0];
+      const last = inWindow[inWindow.length - 1];
+      return { dx: last.x - first.x, duration: last.t - first.t };
+    }
+
+    // Pure function — no DOM/module state — so it can be unit-tested standalone.
     function detectSwipe(history, now, opts = {}) {
       const {
         minDistance = SWIPE_MIN_DISTANCE,
@@ -551,15 +477,8 @@
 
       if (history.length < 2) return null;
 
-      const windowStart = now - windowMs;
-      const inWindow = history.filter((p) => p.t >= windowStart);
-      if (inWindow.length < 2) return null;
-
-      const first = inWindow[0];
-      const last = inWindow[inWindow.length - 1];
-      if (last.t - first.t < minDurationMs) return null;
-
-      const dx = last.x - first.x;
+      const { dx, duration } = windowedDelta(history, now, windowMs);
+      if (duration < minDurationMs) return null;
       if (Math.abs(dx) < minDistance) return null;
 
       // Landmark x is in the raw (unmirrored) camera frame, but the video/canvas
@@ -572,12 +491,19 @@
     function handleSwipeTracking(results, now) {
       if (results.landmarks.length === 0) {
         swipeHistory = [];
+        updateMovementUI(0, false);
         return;
       }
 
       swipeHistory.push({ t: now, x: palmCenterX(results.landmarks[0]) });
       const cutoff = now - SWIPE_WINDOW_MS;
       swipeHistory = swipeHistory.filter((p) => p.t >= cutoff);
+
+      // Live readout of how close the current motion is to the swipe threshold,
+      // independent of whether a swipe is actually allowed to fire right now
+      // (cooldown) — sign flipped so positive == "right", matching the UI.
+      const { dx } = windowedDelta(swipeHistory, now, SWIPE_WINDOW_MS);
+      updateMovementUI(-dx / SWIPE_MIN_DISTANCE, true);
 
       if (now - lastSwipeAt < SWIPE_COOLDOWN_MS) return;
 
@@ -588,6 +514,20 @@
         cycleAvatar(direction);
         flashSwipeIndicator(direction);
       }
+    }
+
+    function updateMovementUI(fraction, handPresent) {
+      if (!handPresent) {
+        els.movementFill.style.width = "0%";
+        els.movementLabel.textContent = "No hand detected";
+        return;
+      }
+      const clamped = Math.max(-1, Math.min(1, fraction));
+      const pct = Math.abs(clamped) * 50; // up to 50% of the track's width, from center
+      els.movementFill.style.left = clamped >= 0 ? "50%" : `${50 - pct}%`;
+      els.movementFill.style.width = `${pct}%`;
+      els.movementLabel.textContent =
+        clamped > 0.05 ? "Movement →" : clamped < -0.05 ? "← Movement" : "Movement";
     }
 
     function cycleAvatar(direction) {
@@ -663,12 +603,6 @@
     }
 
     function wireManualOverrides() {
-      document.querySelectorAll("[data-gesture]").forEach((btn) => {
-        btn.addEventListener("click", () => {
-          const avatar = MOCK_AVATARS[btn.dataset.gesture];
-          if (avatar) updateMockAvatar(avatar);
-        });
-      });
       document.querySelectorAll("[data-swipe]").forEach((btn) => {
         btn.addEventListener("click", () => {
           cycleAvatar(btn.dataset.swipe);
@@ -683,8 +617,6 @@
       overlay = document.getElementById("overlay");
       canvasCtx = overlay.getContext("2d");
       drawingUtils = new DrawingUtils(canvasCtx);
-
-      els.minConfidenceLabel.textContent = `${Math.round(MIN_CONFIDENCE * 100)}%`;
 
       els.landmarkToggle.checked = showLandmarks;
       els.landmarkToggle.addEventListener("change", (e) => {
@@ -734,11 +666,8 @@
     <!-- Debug Panel -->
     <div class="debug-card">
       <div class="debug-row"><span>FPS</span><strong id="fps-value">0</strong></div>
-      <div class="debug-row"><span id="stability-label">Stability</span></div>
-      <div class="stability-track"><div id="stability-fill"></div></div>
-      <div id="candidate-list">
-        <div class="debug-row">No hand detected</div>
-      </div>
+      <div class="debug-row"><span id="movement-label">Movement</span></div>
+      <div class="movement-track"><div id="movement-fill"></div></div>
       <label class="toggle">
         <input type="checkbox" id="landmark-toggle" />
         Show hand landmarks
@@ -747,29 +676,23 @@
   </div>
 
   <div class="gesture-guide">
-    <h3>Supported Hand Gestures:</h3>
+    <h3>Supported Gesture:</h3>
     <ul>
-      <li><strong>Victory / Peace Sign (✌️):</strong> Swaps avatar to <code>agent_vtuber_01</code> (VTuber Clerk)</li>
-      <li><strong>Open Palm (🖐️):</strong> Swaps avatar to <code>agent_classic_01</code> (Classic Clerk)</li>
-      <li><strong>Thumbs Up (👍):</strong> Swaps avatar to <code>agent_mecha_01</code> (Cyber Robot)</li>
-      <li><strong>Swipe hand left / right (any pose):</strong> Cycles backward / forward through
-        Classic Clerk → VTuber Clerk → Cyber Robot → (wraps around)</li>
+      <li><strong>Swipe hand left / right</strong> (any hand shape) — cycles backward / forward
+        through Classic Clerk → VTuber Clerk → Cyber Robot → (wraps around)</li>
     </ul>
     <p style="color:#888; font-size: 13px; margin-top: 12px; margin-bottom: 0;">
-      A held gesture must be classified above <span id="min-confidence-label">65%</span> confidence
-      for several consecutive frames before the avatar swaps — this filters out one-frame misreads
-      and flicker between two similar gestures. A swipe is motion-based instead: it looks at how far
-      your palm moved sideways within a short rolling time window, regardless of hand shape, so it
-      works at any camera frame rate and doesn't require a specific pose.
+      Move your open hand sideways in front of the camera. A swipe is detected by how far your palm
+      travels horizontally within a short rolling time window — not by a specific hand pose or finger
+      shape — so it stays reliable across hand shapes, angles, and lighting. Watch the "Movement" bar
+      in the debug panel while testing: it tracks live, filling toward the edge in the direction
+      you're moving, before a swipe actually fires.
     </p>
   </div>
 
   <div class="manual-controls">
-    <p>Manual override — test the avatar-swap UI and state logic without a camera or gesture:</p>
+    <p>Manual override — test the avatar-cycle UI without a camera or gesture:</p>
     <div class="buttons">
-      <button data-gesture="Victory">✌️ Force VTuber Clerk</button>
-      <button data-gesture="Open_Palm">🖐️ Force Classic Clerk</button>
-      <button data-gesture="Thumb_Up">👍 Force Cyber Robot</button>
       <button data-swipe="left">⬅️ Simulate Swipe Left</button>
       <button data-swipe="right">➡️ Simulate Swipe Right</button>
     </div>
