@@ -25,9 +25,53 @@
       </div>
     </header>
 
-    <!-- Main Grid Layout -->
+    <!-- Main 3-Column Layout: Config (Left) | Portrait Avatar (Center) | Voice Chat (Right) -->
     <main class="main-content">
-      <!-- Left Column: Avatar Stage & Controls -->
+      <!-- Left Column: Product Showcase + Avatar Persona Config Panel -->
+      <section class="config-section">
+        <!-- Featured Product Showcase (Top Left, Above Avatar Persona Config) -->
+        <div id="product-card-overlay" class="card product-card-showcase">
+          <div class="product-card-badge">✨ Featured Store Item</div>
+          <div class="product-img-wrapper">
+            <img id="product-card-img" src="/imgs/riceball.jpg" alt="Featured Product" />
+          </div>
+          <div class="product-card-details">
+            <h4 id="product-card-title">Salted Salmon Onigiri (手巻 紅鮭)</h4>
+            <p id="product-card-desc">¥180 (Tax Incl.) • ~172 kcal</p>
+          </div>
+        </div>
+
+        <div class="card controls-card">
+          <h3>🎮 Avatar Persona Config</h3>
+          <div class="controls-grid">
+            <div class="form-group">
+              <label for="avatar-select">Clerk Avatar:</label>
+              <select id="avatar-select" class="form-control">
+                <option value="">Loading avatars...</option>
+              </select>
+            </div>
+
+            <div class="form-group">
+              <label for="backdrop-select">Store Stage Backdrop:</label>
+              <select id="backdrop-select" class="form-control">
+                <option value="familymart_store">🏪 Shibuya FamilyMart Store Counter</option>
+                <option value="plain_white">⬜ Clean Plain White Studio</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="actions-row">
+            <button id="swap-btn" class="btn btn-secondary" disabled>
+              🔄 Swap Agent
+            </button>
+            <button id="test-speech-btn" class="btn btn-outline" disabled>
+              🗣️ Test Speech
+            </button>
+          </div>
+        </div>
+      </section>
+
+      <!-- Center Column: Portrait Avatar Stage Display -->
       <section class="stage-section">
         <div class="stage-container" id="stage-container">
           <!-- Background Image of FamilyMart -->
@@ -53,42 +97,6 @@
             <span class="pulse-dot"></span> Avatar Speaking...
           </div>
         </div>
-
-        <!-- Controls Card -->
-        <div class="card controls-card">
-          <h3>🎮 Avatar Persona Config</h3>
-          <div class="controls-grid">
-            <div class="form-group">
-              <label for="avatar-select">Clerk Avatar:</label>
-              <select id="avatar-select" class="form-control">
-                <option value="">Loading avatars...</option>
-              </select>
-            </div>
-
-            <div class="form-group">
-              <label for="scene-select">Store Scene:</label>
-              <select id="scene-select" class="form-control">
-                <option value="">Loading scenes...</option>
-              </select>
-            </div>
-
-            <div class="form-group">
-              <label for="voice-select">Voice Preset:</label>
-              <select id="voice-select" class="form-control">
-                <option value="">Loading voices...</option>
-              </select>
-            </div>
-          </div>
-
-          <div class="actions-row">
-            <button id="swap-btn" class="btn btn-secondary" disabled>
-              🔄 Swap Agent
-            </button>
-            <button id="test-speech-btn" class="btn btn-outline" disabled>
-              🗣️ Test Speech ("Irasshaimase!")
-            </button>
-          </div>
-        </div>
       </section>
 
       <!-- Right Column: OpenAI Powered Voice-to-Voice Chat Panel -->
@@ -96,26 +104,26 @@
         <div class="card chat-card">
           <div class="chat-header">
             <h3>🎙️ Voice-to-Voice Assistant</h3>
-            <span class="llm-tag">Web Speech STT + OpenAI + Perxona TTS</span>
-          </div>
-
-          <!-- Quick Suggestion Chips -->
-          <div class="suggestion-chips">
-            <button class="chip" data-prompt="What hot snacks do you recommend?">🍗 Hot Snacks?</button>
-            <button class="chip" data-prompt="Where can I find a good cold drink for summer?">🥤 Cold Drinks?</button>
-            <button class="chip" data-prompt="Do you have Famichiki available?">✨ Famichiki?</button>
           </div>
 
           <!-- Chat Conversation Log -->
           <div class="chat-log" id="chat-log">
             <div class="chat-message message-system">
               <div class="message-bubble">
-                👋 <strong>Irasshaimase! (いらっしゃいませ!)</strong> Speak to me using the 🎤 Microphone button below or type a message!
+                👋 Welcome to FamilyMart! Speak to me using the 🎤 Microphone button below or type a message!
               </div>
             </div>
           </div>
 
           <!-- Voice & Chat Input Form -->
+          <div class="handsfree-bar">
+            <label class="handsfree-toggle" title="When ON, microphone automatically re-opens after avatar finishes speaking">
+              <input type="checkbox" id="handsfree-toggle" checked />
+              <span class="toggle-slider"></span>
+              <span class="toggle-label">🔄 Continuous Live Conversation (Auto-Listen)</span>
+            </label>
+          </div>
+
           <form id="chat-form" class="chat-form">
             <input 
               type="text" 
@@ -124,7 +132,7 @@
               placeholder="Speak or type a question..." 
               autocomplete="off"
             />
-            <button type="button" id="mic-btn" class="btn btn-mic" title="Click to speak (Voice Input)">
+            <button type="button" id="mic-btn" class="btn btn-mic" title="Click to start live voice conversation">
               🎤 Speak
             </button>
             <button type="submit" id="send-btn" class="btn btn-primary btn-send">

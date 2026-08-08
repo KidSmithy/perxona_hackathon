@@ -12,6 +12,7 @@ const __dirname = path.dirname(__filename);
 const app = express();
 app.use(express.json());
 app.use(express.static(path.join(__dirname, "public")));
+app.use("/imgs", express.static(path.join(__dirname, "imgs")));
 
 const PORT = process.env.PORT || 8085;
 const PERXONA_API_BASE_URL = process.env.PERXONA_API_BASE_URL || "https://console.perxona.ai/asia";
@@ -25,11 +26,13 @@ const LLM_BASE_URL = process.env.LLM_BASE_URL || "https://api.openai.com/v1";
 const isMock = !PERXONA_CONNECT_EMAIL || !PERXONA_CONNECT_PASSWORD;
 
 // ── Load FamilyMart Knowledge Base (family_mart.md) ────────────────────────
-const kbPath = path.join(__dirname, "..", "family_mart.md");
+const kbPath = fs.existsSync(path.join(__dirname, "family_mart.md")) 
+  ? path.join(__dirname, "family_mart.md") 
+  : path.join(__dirname, "..", "family_mart.md");
 let familyMartKB = "";
 try {
   familyMartKB = fs.readFileSync(kbPath, "utf-8");
-  console.log(`[FamilyMart App] Knowledge Base loaded successfully from family_mart.md (${familyMartKB.length} bytes)`);
+  console.log(`[FamilyMart App] Knowledge Base loaded successfully from ${kbPath} (${familyMartKB.length} bytes)`);
 } catch (err) {
   console.warn(`[FamilyMart App] Warning: Could not read family_mart.md:`, err.message);
 }
@@ -38,11 +41,15 @@ console.log(`[FamilyMart App] Starting server...`);
 console.log(`[FamilyMart App] Mode: ${isMock ? "MOCK (Catalog UI & OpenAI Chat)" : "LIVE (Perxona Connect API)"}`);
 console.log(`[FamilyMart App] OpenAI Chat Integration: ${LLM_API_KEY ? "ENABLED (" + LLM_MODEL + ")" : "DISABLED"}`);
 
-// ── Mock Catalog Data (Fallback for M1, M2, M3 in Mock Mode) ────────────────
+// ── Mock Catalog Data (Fallback for Avatars in Mock Mode) ───────────────────
 const MOCK_AVATARS = [
   { id: "m1", name: "M1 (Male Clerk 1 - Taro)", description: "FamilyMart Senior Clerk M1" },
   { id: "m2", name: "M2 (Male Clerk 2 - Ken)", description: "FamilyMart Service Assistant M2" },
-  { id: "m3", name: "M3 (Male Clerk 3 - Ren)", description: "FamilyMart Store Host M3" }
+  { id: "m3", name: "M3 (Male Clerk 3 - Ren)", description: "FamilyMart Store Host M3" },
+  { id: "m4", name: "M4 (Male Clerk 4 - Sora)", description: "FamilyMart Store Assistant M4" },
+  { id: "f1", name: "F1 (Female Clerk 1 - Yuki)", description: "FamilyMart Senior Clerk F1" },
+  { id: "f2", name: "F2 (Female Clerk 2 - Hana)", description: "FamilyMart Service Assistant F2" },
+  { id: "f3", name: "F3 (Female Clerk 3 - Mio)", description: "FamilyMart Store Host F3" }
 ];
 
 const MOCK_SCENES = [
@@ -109,9 +116,11 @@ app.get("/api/connect-token", async (req, res) => {
   }
 });
 
-// Filter & Return ONLY M1, M2, and M3 Avatars
+// Filter & Return M1-M4 (Male) and F1-F3 (Female) Avatars
 app.get("/api/avatars", async (req, res) => {
-  if (isMock) return res.json({ items: MOCK_AVATARS });
+  if (isMock) {
+    return res.json({ items: MOCK_AVATARS });
+  }
 
   try {
     const token = await getPerxonaToken();
@@ -125,27 +134,53 @@ app.get("/api/avatars", async (req, res) => {
     const exactM1 = rawItems.find(a => /m1\b|m_1|_m1/i.test(a.name || "") || /m1\b/i.test(a.avatar_id || ""));
     const exactM2 = rawItems.find(a => /m2\b|m_2|_m2/i.test(a.name || "") || /m2\b/i.test(a.avatar_id || ""));
     const exactM3 = rawItems.find(a => /m3\b|m_3|_m3/i.test(a.name || "") || /m3\b/i.test(a.avatar_id || ""));
+    const exactM4 = rawItems.find(a => /m4\b|m_4|_m4/i.test(a.name || "") || /m4\b/i.test(a.avatar_id || ""));
+
+    const exactF1 = rawItems.find(a => /f1\b|f_1|_f1/i.test(a.name || "") || /f1\b/i.test(a.avatar_id || ""));
+    const exactF2 = rawItems.find(a => /f2\b|f_2|_f2/i.test(a.name || "") || /f2\b/i.test(a.avatar_id || ""));
+    const exactF3 = rawItems.find(a => /f3\b|f_3|_f3/i.test(a.name || "") || /f3\b/i.test(a.avatar_id || ""));
+
+    const femaleAvatars = rawItems.filter(a => 
+      (a.name || "").toLowerCase().includes("female") || 
+      (a.name || "").toLowerCase().includes("woman") ||
+      (a.tags || []).some(t => t.toLowerCase().startsWith("skeleton:f_"))
+    );
 
     let selectedList = [];
 
-    if (exactM1 || exactM2 || exactM3) {
-      if (exactM1) selectedList.push({ id: exactM1.avatar_id || exactM1.id, name: `M1 (${exactM1.name})` });
-      if (exactM2) selectedList.push({ id: exactM2.avatar_id || exactM2.id, name: `M2 (${exactM2.name})` });
-      if (exactM3) selectedList.push({ id: exactM3.avatar_id || exactM3.id, name: `M3 (${exactM3.name})` });
+    // Male Avatars M1 - M4
+    if (exactM1) selectedList.push({ id: exactM1.avatar_id || exactM1.id, name: `M1 (${exactM1.name})` });
+    if (exactM2) selectedList.push({ id: exactM2.avatar_id || exactM2.id, name: `M2 (${exactM2.name})` });
+    if (exactM3) selectedList.push({ id: exactM3.avatar_id || exactM3.id, name: `M3 (${exactM3.name})` });
+    if (exactM4) {
+      selectedList.push({ id: exactM4.avatar_id || exactM4.id, name: `M4 (${exactM4.name})` });
+    } else {
+      selectedList.push({ id: selectedList[0]?.id || "m4", name: `M4 (M4)` });
     }
 
-    if (selectedList.length === 0) {
-      const maleAvatars = rawItems.filter(a => 
-        (a.name || "").toLowerCase().includes("male") || 
-        (a.tags || []).some(t => t.toLowerCase().startsWith("skeleton:m_"))
-      );
-      
-      const picks = maleAvatars.slice(0, 3);
-      selectedList = picks.map((item, idx) => ({
-        id: item.avatar_id || item.id,
-        name: `M${idx + 1} (${item.name})`,
-        thumbnail_urls: item.thumbnail_urls
-      }));
+    // Female Avatars F1 - F3
+    if (exactF1) {
+      selectedList.push({ id: exactF1.avatar_id || exactF1.id, name: `F1 (${exactF1.name})` });
+    } else if (femaleAvatars[0]) {
+      selectedList.push({ id: femaleAvatars[0].avatar_id || femaleAvatars[0].id, name: `F1 (${femaleAvatars[0].name})` });
+    } else {
+      selectedList.push({ id: selectedList[0]?.id || "f1", name: `F1 (F1 - Yuki)` });
+    }
+
+    if (exactF2) {
+      selectedList.push({ id: exactF2.avatar_id || exactF2.id, name: `F2 (${exactF2.name})` });
+    } else if (femaleAvatars[1]) {
+      selectedList.push({ id: femaleAvatars[1].avatar_id || femaleAvatars[1].id, name: `F2 (${femaleAvatars[1].name})` });
+    } else {
+      selectedList.push({ id: selectedList[1]?.id || "f2", name: `F2 (F2 - Hana)` });
+    }
+
+    if (exactF3) {
+      selectedList.push({ id: exactF3.avatar_id || exactF3.id, name: `F3 (${exactF3.name})` });
+    } else if (femaleAvatars[2]) {
+      selectedList.push({ id: femaleAvatars[2].avatar_id || femaleAvatars[2].id, name: `F3 (${femaleAvatars[2].name})` });
+    } else {
+      selectedList.push({ id: selectedList[2]?.id || "f3", name: `F3 (F3 - Mio)` });
     }
 
     res.json({ items: selectedList });
@@ -155,6 +190,7 @@ app.get("/api/avatars", async (req, res) => {
   }
 });
 
+// Restrict Store Scene strictly to FamilyMart Convenience Store background
 app.get("/api/scenes", async (req, res) => {
   if (isMock) return res.json({ items: MOCK_SCENES });
   try {
@@ -164,10 +200,22 @@ app.get("/api/scenes", async (req, res) => {
     });
     if (!upstreamRes.ok) throw new Error(`Upstream scenes returned ${upstreamRes.status}`);
     const data = await upstreamRes.json();
-    const items = (data.items || []).map(({ scene_id, ...rest }) => ({
+    const rawItems = data.items || [];
+
+    // Filter scenes for FamilyMart / Store / Counter / Market themes
+    const storeScenes = rawItems.filter(s => {
+      const name = (s.name || "").toLowerCase();
+      const desc = (s.description || "").toLowerCase();
+      return name.includes("familymart") || name.includes("store") || name.includes("counter") || name.includes("market") || name.includes("shop") || desc.includes("store") || desc.includes("convenience");
+    });
+
+    const finalScenes = storeScenes.length > 0 ? storeScenes : rawItems.slice(0, 1);
+    const items = finalScenes.map(({ scene_id, ...rest }) => ({
       id: scene_id || rest.id,
+      name: rest.name && rest.name.toLowerCase().includes("familymart") ? rest.name : `🏪 FamilyMart Convenience Store Stage (${rest.name || "Counter"})`,
       ...rest
     }));
+
     res.json({ items });
   } catch (err) {
     console.error("Scenes proxy error:", err);
@@ -191,9 +239,31 @@ app.get("/api/voices", async (req, res) => {
   }
 });
 
+// Instant Zero-Latency Speech-to-Text Phonetic Auto-Corrector
+function correctPhoneticSTT(text) {
+  if (!text) return text;
+  let cleaned = text;
+  const replacements = [
+    [/\b(fammy|fami|tommy|funny|family)\s*(chicken|chiki|chickin|cheeky)\b/gi, "FamiChiki"],
+    [/\b(spicy|spici)\s*(chicken|chickin)\b/gi, "Spicy Chicken"],
+    [/\b(yukon|ukon|youkon|ucon)\s*(no)?\s*(chikara|chikra|power)?\b/gi, "Ukon no Chikara"],
+    [/\b(pokari|pukari|pocari)\s*(sweat|sweet)?\b/gi, "Pocari Sweat"],
+    [/\b(tamago|egg)\s*(sando|sandwich)\b/gi, "Tamago Sando"],
+    [/\b(souffle|soufle)\s*(pudding|puding)\b/gi, "Soufflé Pudding"],
+    [/\b(spam)\s*(musubi|onigiri)\b/gi, "SPAM® Musubi"],
+    [/\b(fami\s*kara|karaage)\b/gi, "FamiKara"],
+    [/\b(kurobuta|pork\s*bun)\b/gi, "Premium Pork Bun"],
+    [/\b(daikon|radish)\b/gi, "Hot Oden Daikon"]
+  ];
+  for (const [regex, replacement] of replacements) {
+    cleaned = cleaned.replace(regex, replacement);
+  }
+  return cleaned;
+}
+
 // OpenAI Chat Integration Grounded in family_mart.md
 app.post("/api/chat", async (req, res) => {
-  const { message, avatarId } = req.body;
+  const { message, avatarId, history } = req.body;
   if (!message) {
     return res.status(400).json({ error: "Message is required" });
   }
@@ -201,12 +271,23 @@ app.post("/api/chat", async (req, res) => {
     return res.status(500).json({ error: "LLM_API_KEY is not configured on the server." });
   }
 
+  // Perform instant 0ms phonetic correction on STT input
+  const correctedMessage = correctPhoneticSTT(message);
+
   // Determine avatar clerk role
   let personaName = "Taro (M1 - Senior Hot Snack Specialist)";
   if (avatarId && (avatarId.includes("M2") || avatarId.includes("69a02"))) {
     personaName = "Ken (M2 - Bento & Rice Ball Specialist)";
   } else if (avatarId && (avatarId.includes("M3") || avatarId.includes("69a03"))) {
     personaName = "Ren (M3 - Beverage, Sobriety & Dessert Specialist)";
+  } else if (avatarId && (avatarId.includes("M4") || avatarId.includes("69a04"))) {
+    personaName = "AOI (M4 - Customer Service & Promotions Specialist)";
+  } else if (avatarId && (avatarId.includes("F1") || avatarId.includes("f1"))) {
+    personaName = "Yuki (F1 - Senior Host & Sweet Snack Specialist)";
+  } else if (avatarId && (avatarId.includes("F2") || avatarId.includes("f2"))) {
+    personaName = "Hana (F2 - Bakery & Fresh Produce Specialist)";
+  } else if (avatarId && (avatarId.includes("F3") || avatarId.includes("f3"))) {
+    personaName = "Mio (F3 - Health, Hydration & Seasonal Drinks Specialist)";
   }
 
   const systemPrompt = `You are ${personaName}, a super energetic, welcoming, and helpful FamilyMart (ファミリーマート) convenience store clerk in Shibuya, Tokyo!
@@ -218,14 +299,28 @@ ${familyMartKB}
 ===================================================
 
 EXECUTION RULES:
-1. Omotenashi Greeting: Always start with a warm Japanese greeting ("Irasshaimase! (いらっしゃいませ!)").
-2. Strict Product Accuracy: Use exact, tax-included JPY prices (¥), exact item names in English & Japanese, calories, and allergen details from the Knowledge Base.
-3. Scenario Rules:
-   - If user mentions alcohol/drunk/hangover -> Recommend Ukon no Chikara (¥206) + Pocari Sweat (¥162) + Oden Daikon (¥120).
-   - If user mentions studying/late night -> Recommend FAMIMA CAFÉ Latte (¥240) + Spicy Chicken (¥198).
-   - If user asks for light/diet snack -> Recommend Oden Daikon (18 kcal) + Soft-Boiled Egg (75 kcal).
-   - If user orders FamiChiki -> Recommend pairing with Famichiki Bun (¥88) or Green Tea (¥138).
-4. Keep responses concise (2-3 sentences max) so that it sounds great when spoken aloud by a 3D virtual presenter avatar!`;
+1. Natural Conversational Tone: Respond naturally, politely, and directly to the customer's question. NEVER start your response with "Irasshaimase!" or repetitive canned greetings. Jump straight into helpful recommendations.
+2. Single Focus Product Rule: Recommend EXACTLY ONE primary food or drink item per turn. Do NOT list multiple items or combinations at once, so that the customer is not overwhelmed and the featured product display remains 100% precise.
+3. Strict Product Accuracy: Use exact, tax-included JPY prices (¥), exact item names in English & Japanese, calories, and allergen details from the Knowledge Base for the single recommended product.
+4. Scenario Rules:
+   - If user mentions alcohol/drunk/hangover -> Recommend Ukon no Chikara (¥206).
+   - If user mentions studying/late night -> Recommend FAMIMA CAFÉ Latte (¥240).
+   - If user asks for light/diet snack -> Recommend Salted Salmon Onigiri (¥180).
+   - If user asks for hot snacks -> Recommend FamiChiki (¥230).
+5. Speech-to-Text Phonetic Auto-Repair: The user input comes from browser Speech Recognition and may contain misheard words, typos, or mangled Japanese terms (e.g. "Tommy chicken" -> FamiChiki, "Yukon" -> Ukon no Chikara, "Pokari" -> Pocari Sweat). Automatically infer and understand the intended FamilyMart product before generating your response.
+6. Conversation Continuity: Maintain context from earlier conversation turns (e.g. if the user asks "How much is it?", refer to the product discussed in previous messages).
+7. Keep responses ultra-concise (1-2 sentences max focusing on that 1 item) so that it sounds great when spoken aloud by a 3D virtual presenter avatar!`;
+
+  // Build multi-turn conversation context (sliding window of last 10 turns)
+  const sanitizedHistory = Array.isArray(history) 
+    ? history.filter(h => h && (h.role === "user" || h.role === "assistant") && h.content).slice(-10) 
+    : [];
+
+  const messagesPayload = [
+    { role: "system", content: systemPrompt },
+    ...sanitizedHistory,
+    { role: "user", content: correctedMessage }
+  ];
 
   try {
     const apiRes = await fetch(`${LLM_BASE_URL}/chat/completions`, {
@@ -235,13 +330,11 @@ EXECUTION RULES:
         "Authorization": `Bearer ${LLM_API_KEY}`
       },
       body: JSON.stringify({
-        model: LLM_MODEL,
-        messages: [
-          { role: "system", content: systemPrompt },
-          { role: "user", content: message }
-        ],
-        temperature: 0.7,
-        max_tokens: 200
+        model: process.env.LLM_MODEL || LLM_MODEL || "gpt-4o-mini",
+        messages: messagesPayload,
+        temperature: 0.5,
+        max_tokens: parseInt(process.env.LLM_MAX_TOKENS || "100", 10),
+        stream: true
       })
     });
 
@@ -251,12 +344,57 @@ EXECUTION RULES:
       throw new Error(`OpenAI API returned status ${apiRes.status}`);
     }
 
-    const data = await apiRes.json();
-    const replyText = data.choices?.[0]?.message?.content || "いらっしゃいませ! How can I help you at FamilyMart today?";
-    res.json({ reply: replyText });
+    res.setHeader("Content-Type", "text/event-stream");
+    res.setHeader("Cache-Control", "no-cache");
+    res.setHeader("Connection", "keep-alive");
+
+    const reader = apiRes.body.getReader();
+    const decoder = new TextDecoder("utf-8");
+    let buffer = "";
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+
+      const lines = buffer.split("\n");
+      buffer = lines.pop() || "";
+
+      for (const line of lines) {
+        const trimmed = line.trim();
+        if (!trimmed || trimmed === "data: [DONE]") continue;
+        if (trimmed.startsWith("data: ")) {
+          try {
+            const parsed = JSON.parse(trimmed.slice(6));
+            const delta = parsed.choices?.[0]?.delta?.content;
+            if (delta) {
+              res.write(`data: ${JSON.stringify({ delta })}\n\n`);
+            }
+          } catch (e) {
+            // Skip parse errors for incomplete JSON
+          }
+        }
+      }
+    }
+
+    if (buffer.trim() && buffer.trim().startsWith("data: ")) {
+      try {
+        const parsed = JSON.parse(buffer.trim().slice(6));
+        const delta = parsed.choices?.[0]?.delta?.content;
+        if (delta) res.write(`data: ${JSON.stringify({ delta })}\n\n`);
+      } catch (e) {}
+    }
+
+    res.write("data: [DONE]\n\n");
+    res.end();
   } catch (err) {
     console.error("[Chat Error]", err);
-    res.status(500).json({ error: err.message || "Failed to generate chat response" });
+    if (!res.headersSent) {
+      res.status(500).json({ error: err.message || "Failed to generate chat response" });
+    } else {
+      res.write(`data: ${JSON.stringify({ error: err.message })}\n\n`);
+      res.end();
+    }
   }
 });
 

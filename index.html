@@ -247,6 +247,75 @@
     .manual-controls button:hover {
       background: #333;
     }
+
+    /* Gesture Chat Log */
+    .gesture-chat-card {
+      background: #1e1e1e;
+      border-radius: 12px;
+      padding: 16px;
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+      display: flex;
+      flex-direction: column;
+      width: 280px;
+      height: 240px;
+      box-sizing: border-box;
+    }
+
+    .gesture-chat-header {
+      font-weight: bold;
+      font-size: 14px;
+      margin-bottom: 10px;
+      color: #fff;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border-bottom: 1px solid #333;
+      padding-bottom: 6px;
+    }
+
+    .gesture-chat-list {
+      flex: 1;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      padding-right: 4px;
+    }
+
+    .chat-bubble {
+      padding: 6px 12px;
+      border-radius: 12px;
+      font-size: 13px;
+      max-width: 85%;
+      word-break: break-word;
+      animation: fadeIn 0.2s ease-in-out;
+    }
+
+    .chat-bubble.left {
+      background: #7c4dff;
+      color: #ffffff;
+      align-self: flex-start;
+      border-bottom-left-radius: 2px;
+    }
+
+    .chat-bubble.right {
+      background: #00acc1;
+      color: #ffffff;
+      align-self: flex-end;
+      border-bottom-right-radius: 2px;
+    }
+
+    .chat-bubble .timestamp {
+      font-size: 10px;
+      opacity: 0.7;
+      margin-top: 2px;
+      text-align: right;
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(4px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
   </style>
 
   <!-- MediaPipe Vision Bundle CDN — pinned to 1.0.1 (do not use @latest: it can silently
@@ -342,6 +411,18 @@
       els.movementLabel = document.getElementById("movement-label");
       els.landmarkToggle = document.getElementById("landmark-toggle");
       els.swipeIndicator = document.getElementById("swipe-indicator");
+      els.gestureChatList = document.getElementById("gesture-chat-list");
+    }
+
+    function addGestureChatMessage(direction) {
+      if (!els.gestureChatList) return;
+      const bubble = document.createElement("div");
+      bubble.className = `chat-bubble ${direction}`;
+      const timeStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+      const labelStr = direction === "left" ? "👈 Gesture: Left" : "Gesture: Right 👉";
+      bubble.innerHTML = `<div>${labelStr}</div><div class="timestamp">${timeStr}</div>`;
+      els.gestureChatList.appendChild(bubble);
+      els.gestureChatList.scrollTop = els.gestureChatList.scrollHeight;
     }
 
     function setStatus(text, isError = false) {
@@ -589,6 +670,7 @@
       const delta = direction === "right" ? 1 : -1;
       currentAvatarIndex = (currentAvatarIndex + delta + AVATAR_CYCLE.length) % AVATAR_CYCLE.length;
       updateMockAvatar(AVATAR_CYCLE[currentAvatarIndex]);
+      addGestureChatMessage(direction);
     }
 
     function flashSwipeIndicator(direction) {
@@ -727,6 +809,17 @@
         <input type="checkbox" id="landmark-toggle" />
         Show hand landmarks
       </label>
+    </div>
+
+    <!-- Gesture Chat / History Log -->
+    <div class="gesture-chat-card">
+      <div class="gesture-chat-header">
+        <span>Gesture Log</span>
+        <span style="font-size:11px; color:#a0a0a0;">Live Stream</span>
+      </div>
+      <div id="gesture-chat-list" class="gesture-chat-list">
+        <!-- Gesture chat messages will be appended here -->
+      </div>
     </div>
   </div>
 
