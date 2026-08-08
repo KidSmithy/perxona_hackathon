@@ -56,6 +56,14 @@ specific hand shape, so it works with any hand pose and stays consistent across 
 rates. The debug panel's "Movement" bar shows live how close the current motion is to the swipe
 threshold before one actually fires.
 
+Three things keep it from misfiring on hand tremor/jitter or losing an in-progress swipe:
+exponential smoothing on the tracked palm position, a directional-consistency check that rejects
+back-and-forth motion even when it has enough *net* displacement to otherwise pass (real swipes are
+mostly monotonic, jitter isn't), and a short grace period that tolerates a few consecutive
+no-hand-detected frames instead of resetting immediately — useful since fast motion is exactly when
+MediaPipe is most likely to briefly lose tracking. See `SWIPE_MIN_CONSISTENCY`,
+`SWIPE_SMOOTHING_ALPHA`, and `SWIPE_MAX_MISSED_FRAMES` at the top of the script to tune these.
+
 ### What's different from the guide's code block
 
 `index.html` replaces the guide's static pose-gesture swapping (Victory/Open Palm/Thumbs Up →
