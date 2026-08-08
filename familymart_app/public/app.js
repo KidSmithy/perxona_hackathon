@@ -20,6 +20,7 @@ const chatForm = document.getElementById("chat-form");
 const chatInput = document.getElementById("chat-input");
 const chatLog = document.getElementById("chat-log");
 const sendBtn = document.getElementById("send-btn");
+const micBtn = document.getElementById("mic-btn");
 const chipBtns = document.querySelectorAll(".chip");
 
 // ── State Variables ────────────────────────────────────────────────────────
@@ -28,6 +29,79 @@ let requestedRevision = 0;
 let initializedRevision = 0;
 let isInitializing = false;
 let isTokenRefreshing = false;
+
+// ── Web Speech Recognition (Speech-to-Text) ───────────────────────────────
+const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+let recognition = null;
+let isListening = false;
+
+if (SpeechRecognition) {
+  recognition = new SpeechRecognition();
+  recognition.continuous = false;
+  recognition.interimResults = true;
+  recognition.lang = "en-US";
+
+  recognition.onstart = () => {
+    isListening = true;
+    micBtn.classList.add("listening");
+    micBtn.innerHTML = "🔴 Listening...";
+    chatInput.placeholder = "Listening to your voice...";
+  };
+
+  recognition.onresult = (e) => {
+    const transcript = Array.from(e.results)
+      .map((res) => res[0].transcript)
+      .join("");
+    chatInput.value = transcript;
+  };
+
+  recognition.onerror = (e) => {
+    console.error("STT Error:", e.error);
+    stopMicListening();
+    if (e.error !== "no-speech" && e.error !== "aborted") {
+      showError(`Voice input error: ${e.error}`);
+    }
+  };
+
+  recognition.onend = () => {
+    stopMicListening();
+    const query = chatInput.value.trim();
+    if (query) {
+      sendChatMessage(query);
+    }
+  };
+} else {
+  if (micBtn) {
+    micBtn.title = "Web Speech API is not supported in this browser (Use Chrome/Edge/Safari)";
+  }
+}
+
+function stopMicListening() {
+  isListening = false;
+  micBtn.classList.remove("listening");
+  micBtn.innerHTML = "🎤 Speak";
+  chatInput.placeholder = "Speak or type a question...";
+}
+
+if (micBtn) {
+  micBtn.addEventListener("click", () => {
+    if (!recognition) {
+      alert("Speech recognition is not supported in your browser. Please use Chrome, Edge, or Safari.");
+      return;
+    }
+
+    if (isListening) {
+      recognition.stop();
+    } else {
+      chatInput.value = "";
+      try {
+        recognition.start();
+      } catch (err) {
+        console.error("Mic start error:", err);
+      }
+    }
+  });
+}
 
 // ── Helper API Request ──────────────────────────────────────────────────────
 async function apiRequest(endpoint, options = {}) {
@@ -166,20 +240,26 @@ launchBtn.addEventListener("click", async () => {
   }
 });
 
-// ── Dynamic Target Swap with Revision Guard ───────────────────────────────
+// ── Dynamic Target Swap ────────────────────────────────────────────────────
 async function initializePresenterTarget() {
   requestedRevision++;
   if (isInitializing) return;
 
   isInitializing = true;
   try {
-    while (initializedRevision !== requestedRevision) {
+    while (initializedRevision < requestedRevision) {
       const currentRev = requestedRevision;
       const target = {
         avatarId: avatarSelect.value,
         sceneId: sceneSelect.value,
         voiceId: voiceSelect.value || undefined,
       };
+
+      if (!target.avatarId || !target.sceneId) {
+        statusBadge.textContent = "Please select avatar & scene";
+        initializedRevision = currentRev;
+        break;
+      }
 
       statusBadge.textContent = "Initializing Target...";
       const { connect_token } = await apiRequest("/api/connect-token");
@@ -190,15 +270,13 @@ async function initializePresenterTarget() {
     }
   } catch (err) {
     console.error("Initialization failed:", err);
+    initializedRevision = requestedRevision;
     showError(`Presenter Init Failed: ${err.message}`);
     appendChatMessage(`⚠️ Presenter Init Error: ${err.message}`, "system");
   } finally {
     isInitializing = false;
     launchBtn.disabled = false;
     launchBtn.textContent = "🔊 Enter Store & Launch Avatar";
-    if (initializedRevision !== requestedRevision) {
-      initializePresenterTarget();
-    }
   }
 }
 
@@ -254,7 +332,7 @@ async function sendChatMessage(message) {
     const reply = data.reply || "いらっしゃいませ!";
     appendChatMessage(reply, "assistant");
 
-    // Speak response
+    // Voice-to-Voice Output: Pipe reply to sv-presenter for speech synthesis!
     speakText(reply);
   } catch (err) {
     console.error("Chat error:", err);

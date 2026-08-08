@@ -5,7 +5,8 @@
   "description": "FamilyMart Virtual Avatar Assistant powered by Perxona Connect & OpenAI",
   "main": "server.mjs",
   "scripts": {
-    "start": "node server.mjs"
+    "start": "node server.mjs",
+    "dev": "node --watch server.mjs"
   },
   "dependencies": {
     "dotenv": "^16.4.5",

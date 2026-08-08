@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>FamilyMart 🏪 Virtual Avatar Clerk & AI Assistant</title>
+  <title>FamilyMart 🏪 Voice-to-Voice AI Avatar Clerk</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700&family=Noto+Sans+JP:wght@400;500;700&display=swap" rel="stylesheet">
@@ -16,10 +16,10 @@
       <div class="brand-bar">
         <div class="familymart-logo">
           <span class="fm-green">FamilyMart</span>
-          <span class="fm-subtext">ファミリーマート AI Store Assistant</span>
+          <span class="fm-subtext">ファミリーマート Voice-to-Voice AI Clerk</span>
         </div>
         <div class="header-badges">
-          <span id="mode-badge" class="badge badge-mock">Catalog & OpenAI Mode</span>
+          <span id="mode-badge" class="badge badge-status">Live Perxona Mode</span>
           <span id="status-badge" class="badge badge-status">Uninitialized</span>
         </div>
       </div>
@@ -38,7 +38,7 @@
             <div class="welcome-card">
               <div class="welcome-icon">🏪</div>
               <h2 id="welcome-title">Welcome to Shibuya FamilyMart!</h2>
-              <p id="welcome-text">Click below to unlock audio and initialize your 3D Virtual Clerk avatar.</p>
+              <p id="welcome-text">Click below to unlock audio and launch your 3D Voice-to-Voice Clerk.</p>
               <button id="launch-btn" class="btn btn-primary btn-large">
                 <span class="btn-icon">🔊</span> Enter Store & Launch Avatar
               </button>
@@ -56,7 +56,7 @@
 
         <!-- Controls Card -->
         <div class="card controls-card">
-          <h3>🎮 Dynamic Avatar & Persona Config</h3>
+          <h3>🎮 Avatar Persona Config</h3>
           <div class="controls-grid">
             <div class="form-group">
               <label for="avatar-select">Clerk Avatar:</label>
@@ -82,7 +82,7 @@
 
           <div class="actions-row">
             <button id="swap-btn" class="btn btn-secondary" disabled>
-              🔄 Swap / Re-initialize Agent
+              🔄 Swap Agent
             </button>
             <button id="test-speech-btn" class="btn btn-outline" disabled>
               🗣️ Test Speech ("Irasshaimase!")
@@ -91,12 +91,12 @@
         </div>
       </section>
 
-      <!-- Right Column: OpenAI Powered Chatbot Panel -->
+      <!-- Right Column: OpenAI Powered Voice-to-Voice Chat Panel -->
       <section class="chat-section">
         <div class="card chat-card">
           <div class="chat-header">
-            <h3>💬 Ask the FamilyMart Assistant</h3>
-            <span class="llm-tag">Powered by OpenAI gpt-4o-mini</span>
+            <h3>🎙️ Voice-to-Voice Assistant</h3>
+            <span class="llm-tag">Web Speech STT + OpenAI + Perxona TTS</span>
           </div>
 
           <!-- Quick Suggestion Chips -->
@@ -110,20 +110,23 @@
           <div class="chat-log" id="chat-log">
             <div class="chat-message message-system">
               <div class="message-bubble">
-                👋 <strong>Irasshaimase! (いらっしゃいませ!)</strong> Ask me anything about FamilyMart items, fresh bento, or local directions!
+                👋 <strong>Irasshaimase! (いらっしゃいませ!)</strong> Speak to me using the 🎤 Microphone button below or type a message!
               </div>
             </div>
           </div>
 
-          <!-- Chat Input Form -->
+          <!-- Voice & Chat Input Form -->
           <form id="chat-form" class="chat-form">
             <input 
               type="text" 
               id="chat-input" 
               class="form-control chat-input" 
-              placeholder="Ask Taro-san a question..." 
+              placeholder="Speak or type a question..." 
               autocomplete="off"
             />
+            <button type="button" id="mic-btn" class="btn btn-mic" title="Click to speak (Voice Input)">
+              🎤 Speak
+            </button>
             <button type="submit" id="send-btn" class="btn btn-primary btn-send">
               Send 🚀
             </button>
@@ -134,7 +137,7 @@
 
     <!-- Footer -->
     <footer class="store-footer">
-      <p>Perxona Connect API & OpenAI Integration • Built for FamilyMart Convenience Store Assistant Demo</p>
+      <p>Voice-to-Voice AI Assistant • Perxona Connect API & OpenAI Integration</p>
     </footer>
   </div>
 

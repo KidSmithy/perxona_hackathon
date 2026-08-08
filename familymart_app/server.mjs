@@ -1,5 +1,6 @@
 import express from "express";
 import path from "path";
+import fs from "fs";
 import { fileURLToPath } from "url";
 import dotenv from "dotenv";
 
@@ -23,43 +24,58 @@ const LLM_BASE_URL = process.env.LLM_BASE_URL || "https://api.openai.com/v1";
 
 const isMock = !PERXONA_CONNECT_EMAIL || !PERXONA_CONNECT_PASSWORD;
 
+// ── Load FamilyMart Knowledge Base (family_mart.md) ────────────────────────
+const kbPath = path.join(__dirname, "..", "family_mart.md");
+let familyMartKB = "";
+try {
+  familyMartKB = fs.readFileSync(kbPath, "utf-8");
+  console.log(`[FamilyMart App] Knowledge Base loaded successfully from family_mart.md (${familyMartKB.length} bytes)`);
+} catch (err) {
+  console.warn(`[FamilyMart App] Warning: Could not read family_mart.md:`, err.message);
+}
+
 console.log(`[FamilyMart App] Starting server...`);
 console.log(`[FamilyMart App] Mode: ${isMock ? "MOCK (Catalog UI & OpenAI Chat)" : "LIVE (Perxona Connect API)"}`);
 console.log(`[FamilyMart App] OpenAI Chat Integration: ${LLM_API_KEY ? "ENABLED (" + LLM_MODEL + ")" : "DISABLED"}`);
 
-// ── Mock Catalog Data ────────────────────────────────────────────────────────
+// ── Mock Catalog Data (Fallback for M1, M2, M3 in Mock Mode) ────────────────
 const MOCK_AVATARS = [
-  {
-    id: "fm_clerk_taro",
-    name: "Taro (FamilyMart Senior Clerk)",
-    thumbnail_urls: { head: "/familymart_bg.jpg" },
-    description: "Friendly Shibuya Store Manager - Specialist in Famichiki & Hot Snacks"
-  },
-  {
-    id: "fm_clerk_hanako",
-    name: "Hanako (Customer Service Host)",
-    thumbnail_urls: { head: "/familymart_bg.jpg" },
-    description: "Bilingual Convenience Assistant - Matcha & Cafe Specialist"
-  },
-  {
-    id: "fm_clerk_robot",
-    name: "Fami-Bot 3000 (Robotic Store Helper)",
-    thumbnail_urls: { head: "/familymart_bg.jpg" },
-    description: "Automated shelf-stocking & greeting unit"
-  }
+  { id: "m1", name: "M1 (Male Clerk 1 - Taro)", description: "FamilyMart Senior Clerk M1" },
+  { id: "m2", name: "M2 (Male Clerk 2 - Ken)", description: "FamilyMart Service Assistant M2" },
+  { id: "m3", name: "M3 (Male Clerk 3 - Ren)", description: "FamilyMart Store Host M3" }
 ];
 
 const MOCK_SCENES = [
-  { id: "scene_fm_counter", name: "FamilyMart Main Checkout Counter" },
-  { id: "scene_fm_snack_aisle", name: "Famichiki & Hot Snack Station" },
-  { id: "scene_fm_cafe", name: "FAMIMA CAFÉ Corner" }
+  { id: "scene_fm_counter", name: "FamilyMart Main Checkout Counter" }
 ];
 
 const MOCK_VOICES = [
-  { id: "voice_jp_energetic", name: "Japanese Energetic (Store Assistant)" },
-  { id: "voice_jp_polite", name: "Japanese Polite Customer Care" },
-  { id: "voice_en_friendly", name: "English Friendly Guide" }
+  { id: "voice_jp_energetic", name: "Japanese Energetic (Store Assistant)" }
 ];
+
+// Token Cache
+let cachedToken = null;
+
+async function getPerxonaToken() {
+  if (isMock) return "mock_connect_token_familymart_demo";
+  if (cachedToken) return cachedToken;
+
+  const authRes = await fetch(`${PERXONA_API_BASE_URL}/api/v1/connect/auth/login`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email: PERXONA_CONNECT_EMAIL, password: PERXONA_CONNECT_PASSWORD })
+  });
+
+  if (!authRes.ok) {
+    const errData = await authRes.json().catch(() => ({}));
+    const msg = errData.detail || errData.message || `Auth login failed with status ${authRes.status}`;
+    throw new Error(msg);
+  }
+
+  const data = await authRes.json();
+  cachedToken = data.access_token;
+  return cachedToken;
+}
 
 // ── API Routes ──────────────────────────────────────────────────────────────
 
@@ -75,35 +91,107 @@ app.get("/api/config", (req, res) => {
 
 // Health endpoint
 app.get("/api/health", (req, res) => {
-  res.json({ status: "ok", mode: isMock ? "mock" : "live", timestamp: new Date().toISOString() });
+  res.json({ 
+    status: "ok", 
+    mode: isMock ? "mock" : "live", 
+    kbLoaded: Boolean(familyMartKB),
+    timestamp: new Date().toISOString() 
+  });
 });
 
 // Connect Token endpoint
 app.get("/api/connect-token", async (req, res) => {
-  if (isMock) {
-    return res.json({ connect_token: "mock_connect_token_familymart_demo" });
-  }
-  // Upstream Perxona Auth proxy if credentials exist
   try {
-    const authRes = await fetch(`${PERXONA_API_BASE_URL}/api/v1/connect/auth/token`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email: PERXONA_CONNECT_EMAIL, password: PERXONA_CONNECT_PASSWORD })
-    });
-    if (!authRes.ok) throw new Error(`Auth failed with status ${authRes.status}`);
-    const data = await authRes.json();
-    res.json({ connect_token: data.access_token });
+    const token = await getPerxonaToken();
+    res.json({ connect_token: token });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
-// Catalog proxies
-app.get("/api/avatars", (req, res) => res.json({ items: MOCK_AVATARS }));
-app.get("/api/scenes", (req, res) => res.json({ items: MOCK_SCENES }));
-app.get("/api/voices", (req, res) => res.json({ items: MOCK_VOICES }));
+// Filter & Return ONLY M1, M2, and M3 Avatars
+app.get("/api/avatars", async (req, res) => {
+  if (isMock) return res.json({ items: MOCK_AVATARS });
 
-// OpenAI Chat Integration
+  try {
+    const token = await getPerxonaToken();
+    const upstreamRes = await fetch(`${PERXONA_API_BASE_URL}/api/v1/connect/assets/avatars?size=100`, {
+      headers: { Authorization: `Bearer ${token}` }
+    });
+    if (!upstreamRes.ok) throw new Error(`Upstream avatars returned ${upstreamRes.status}`);
+    const data = await upstreamRes.json();
+    const rawItems = data.items || [];
+
+    const exactM1 = rawItems.find(a => /m1\b|m_1|_m1/i.test(a.name || "") || /m1\b/i.test(a.avatar_id || ""));
+    const exactM2 = rawItems.find(a => /m2\b|m_2|_m2/i.test(a.name || "") || /m2\b/i.test(a.avatar_id || ""));
+    const exactM3 = rawItems.find(a => /m3\b|m_3|_m3/i.test(a.name || "") || /m3\b/i.test(a.avatar_id || ""));
+
+    let selectedList = [];
+
+    if (exactM1 || exactM2 || exactM3) {
+      if (exactM1) selectedList.push({ id: exactM1.avatar_id || exactM1.id, name: `M1 (${exactM1.name})` });
+      if (exactM2) selectedList.push({ id: exactM2.avatar_id || exactM2.id, name: `M2 (${exactM2.name})` });
+      if (exactM3) selectedList.push({ id: exactM3.avatar_id || exactM3.id, name: `M3 (${exactM3.name})` });
+    }
+
+    if (selectedList.length === 0) {
+      const maleAvatars = rawItems.filter(a => 
+        (a.name || "").toLowerCase().includes("male") || 
+        (a.tags || []).some(t => t.toLowerCase().startsWith("skeleton:m_"))
+      );
+      
+      const picks = maleAvatars.slice(0, 3);
+      selectedList = picks.map((item, idx) => ({
+        id: item.avatar_id || item.id,
+        name: `M${idx + 1} (${item.name})`,
+        thumbnail_urls: item.thumbnail_urls
+      }));
+    }
+
+    res.json({ items: selectedList });
+  } catch (err) {
+    console.error("Avatars proxy error:", err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get("/api/scenes", async (req, res) => {
+  if (isMock) return res.json({ items: MOCK_SCENES });
+  try {
+    const token = await getPerxonaToken();
+    const upstreamRes = await fetch(`${PERXONA_API_BASE_URL}/api/v1/connect/assets/scenes`, {
+      headers: { Authorization: `Bearer ${token}` }
+    });
+    if (!upstreamRes.ok) throw new Error(`Upstream scenes returned ${upstreamRes.status}`);
+    const data = await upstreamRes.json();
+    const items = (data.items || []).map(({ scene_id, ...rest }) => ({
+      id: scene_id || rest.id,
+      ...rest
+    }));
+    res.json({ items });
+  } catch (err) {
+    console.error("Scenes proxy error:", err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get("/api/voices", async (req, res) => {
+  if (isMock) return res.json({ items: MOCK_VOICES });
+  try {
+    const token = await getPerxonaToken();
+    const upstreamRes = await fetch(`${PERXONA_API_BASE_URL}/api/v1/connect/voices`, {
+      headers: { Authorization: `Bearer ${token}` }
+    });
+    if (!upstreamRes.ok) throw new Error(`Upstream voices returned ${upstreamRes.status}`);
+    const data = await upstreamRes.json();
+    res.json(data);
+  } catch (err) {
+    console.error("Voices proxy error:", err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// OpenAI Chat Integration Grounded in family_mart.md
 app.post("/api/chat", async (req, res) => {
   const { message, avatarId } = req.body;
   if (!message) {
@@ -113,14 +201,31 @@ app.post("/api/chat", async (req, res) => {
     return res.status(500).json({ error: "LLM_API_KEY is not configured on the server." });
   }
 
-  const selectedClerk = MOCK_AVATARS.find(a => a.id === avatarId)?.name || "FamilyMart Clerk";
+  // Determine avatar clerk role
+  let personaName = "Taro (M1 - Senior Hot Snack Specialist)";
+  if (avatarId && (avatarId.includes("M2") || avatarId.includes("69a02"))) {
+    personaName = "Ken (M2 - Bento & Rice Ball Specialist)";
+  } else if (avatarId && (avatarId.includes("M3") || avatarId.includes("69a03"))) {
+    personaName = "Ren (M3 - Beverage, Sobriety & Dessert Specialist)";
+  }
 
-  const systemPrompt = `You are ${selectedClerk}, a super energetic, welcoming, and helpful FamilyMart (ファミリーマート) convenience store clerk in Tokyo!
-Your goal is to assist store customers in a fun, cheerful, and polite way.
-Key guidelines:
-1. Always welcome customers with enthusiasm! Use greetings like "Irasshaimase! (いらっしゃいませ!)"
-2. Frequently recommend popular FamilyMart items like freshly fried Famichiki (ファミチキ), FAMIMA CAFÉ matcha latte, egg salad sandwiches, or seasonal bento boxes.
-3. Keep your responses short, natural, and conversational (2-3 sentences max) so that it sounds great when spoken aloud by a 3D virtual presenter avatar!`;
+  const systemPrompt = `You are ${personaName}, a super energetic, welcoming, and helpful FamilyMart (ファミリーマート) convenience store clerk in Shibuya, Tokyo!
+
+You have full access to the official FamilyMart Master Store Inventory & Recommendation Knowledge Base below:
+
+=== FAMILYMART MASTER INVENTORY & DECISION TREE ===
+${familyMartKB}
+===================================================
+
+EXECUTION RULES:
+1. Omotenashi Greeting: Always start with a warm Japanese greeting ("Irasshaimase! (いらっしゃいませ!)").
+2. Strict Product Accuracy: Use exact, tax-included JPY prices (¥), exact item names in English & Japanese, calories, and allergen details from the Knowledge Base.
+3. Scenario Rules:
+   - If user mentions alcohol/drunk/hangover -> Recommend Ukon no Chikara (¥206) + Pocari Sweat (¥162) + Oden Daikon (¥120).
+   - If user mentions studying/late night -> Recommend FAMIMA CAFÉ Latte (¥240) + Spicy Chicken (¥198).
+   - If user asks for light/diet snack -> Recommend Oden Daikon (18 kcal) + Soft-Boiled Egg (75 kcal).
+   - If user orders FamiChiki -> Recommend pairing with Famichiki Bun (¥88) or Green Tea (¥138).
+4. Keep responses concise (2-3 sentences max) so that it sounds great when spoken aloud by a 3D virtual presenter avatar!`;
 
   try {
     const apiRes = await fetch(`${LLM_BASE_URL}/chat/completions`, {
@@ -155,9 +260,9 @@ Key guidelines:
   }
 });
 
-app.listen(PORT, () => {
+const server = app.listen(PORT, () => {
   console.log(`\n==================================================`);
   console.log(`🏪 FamilyMart Virtual Avatar Assistant Ready!`);
-  console.log(`🌐 URL: http://localhost:${PORT}`);
+  console.log(`🌐 URL: http://localhost:${server.address().port}`);
   console.log(`==================================================\n`);
 });
