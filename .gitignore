@@ -1,0 +1,32 @@
+# Environment & API keys
+.env
+.env.local
+.env.*.local
+*.env
+
+# Dependency directories
+node_modules/
+**/node_modules/
+
+# Logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+*.log
+
+# Editor & OS files
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.suo
+*.ntvsopt
+*.njsproj
+*.sln
+*.swp
+
+# Temporary & build outputs
+dist/
+build/
+.cache/

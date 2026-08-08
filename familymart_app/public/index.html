@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>FamilyMart 🏪 Virtual Avatar Clerk & AI Assistant</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700&family=Noto+Sans+JP:wght@400;500;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="app-container">
+    <!-- Header -->
+    <header class="store-header">
+      <div class="brand-bar">
+        <div class="familymart-logo">
+          <span class="fm-green">FamilyMart</span>
+          <span class="fm-subtext">ファミリーマート AI Store Assistant</span>
+        </div>
+        <div class="header-badges">
+          <span id="mode-badge" class="badge badge-mock">Catalog & OpenAI Mode</span>
+          <span id="status-badge" class="badge badge-status">Uninitialized</span>
+        </div>
+      </div>
+    </header>
+
+    <!-- Main Grid Layout -->
+    <main class="main-content">
+      <!-- Left Column: Avatar Stage & Controls -->
+      <section class="stage-section">
+        <div class="stage-container" id="stage-container">
+          <!-- Background Image of FamilyMart -->
+          <div class="stage-background" style="background-image: url('/familymart_bg.jpg');"></div>
+          
+          <!-- Audio Unlock / Start Overlay -->
+          <div class="stage-overlay" id="stage-overlay">
+            <div class="welcome-card">
+              <div class="welcome-icon">🏪</div>
+              <h2 id="welcome-title">Welcome to Shibuya FamilyMart!</h2>
+              <p id="welcome-text">Click below to unlock audio and initialize your 3D Virtual Clerk avatar.</p>
+              <button id="launch-btn" class="btn btn-primary btn-large">
+                <span class="btn-icon">🔊</span> Enter Store & Launch Avatar
+              </button>
+            </div>
+          </div>
+
+          <!-- Perxona Presenter Web Component -->
+          <sv-presenter hidden id="avatar-presenter"></sv-presenter>
+          
+          <!-- Live Speaking Indicator -->
+          <div id="speaking-indicator" class="speaking-indicator hidden">
+            <span class="pulse-dot"></span> Avatar Speaking...
+          </div>
+        </div>
+
+        <!-- Controls Card -->
+        <div class="card controls-card">
+          <h3>🎮 Dynamic Avatar & Persona Config</h3>
+          <div class="controls-grid">
+            <div class="form-group">
+              <label for="avatar-select">Clerk Avatar:</label>
+              <select id="avatar-select" class="form-control">
+                <option value="">Loading avatars...</option>
+              </select>
+            </div>
+
+            <div class="form-group">
+              <label for="scene-select">Store Scene:</label>
+              <select id="scene-select" class="form-control">
+                <option value="">Loading scenes...</option>
+              </select>
+            </div>
+
+            <div class="form-group">
+              <label for="voice-select">Voice Preset:</label>
+              <select id="voice-select" class="form-control">
+                <option value="">Loading voices...</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="actions-row">
+            <button id="swap-btn" class="btn btn-secondary" disabled>
+              🔄 Swap / Re-initialize Agent
+            </button>
+            <button id="test-speech-btn" class="btn btn-outline" disabled>
+              🗣️ Test Speech ("Irasshaimase!")
+            </button>
+          </div>
+        </div>
+      </section>
+
+      <!-- Right Column: OpenAI Powered Chatbot Panel -->
+      <section class="chat-section">
+        <div class="card chat-card">
+          <div class="chat-header">
+            <h3>💬 Ask the FamilyMart Assistant</h3>
+            <span class="llm-tag">Powered by OpenAI gpt-4o-mini</span>
+          </div>
+
+          <!-- Quick Suggestion Chips -->
+          <div class="suggestion-chips">
+            <button class="chip" data-prompt="What hot snacks do you recommend?">🍗 Hot Snacks?</button>
+            <button class="chip" data-prompt="Where can I find a good cold drink for summer?">🥤 Cold Drinks?</button>
+            <button class="chip" data-prompt="Do you have Famichiki available?">✨ Famichiki?</button>
+          </div>
+
+          <!-- Chat Conversation Log -->
+          <div class="chat-log" id="chat-log">
+            <div class="chat-message message-system">
+              <div class="message-bubble">
+                👋 <strong>Irasshaimase! (いらっしゃいませ!)</strong> Ask me anything about FamilyMart items, fresh bento, or local directions!
+              </div>
+            </div>
+          </div>
+
+          <!-- Chat Input Form -->
+          <form id="chat-form" class="chat-form">
+            <input 
+              type="text" 
+              id="chat-input" 
+              class="form-control chat-input" 
+              placeholder="Ask Taro-san a question..." 
+              autocomplete="off"
+            />
+            <button type="submit" id="send-btn" class="btn btn-primary btn-send">
+              Send 🚀
+            </button>
+          </form>
+        </div>
+      </section>
+    </main>
+
+    <!-- Footer -->
+    <footer class="store-footer">
+      <p>Perxona Connect API & OpenAI Integration • Built for FamilyMart Convenience Store Assistant Demo</p>
+    </footer>
+  </div>
+
+  <script src="app.js" type="module"></script>
+</body>
+</html>
