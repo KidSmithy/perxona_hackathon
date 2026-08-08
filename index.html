@@ -1,0 +1,646 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Konbini Gesture Recognition Test</title>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background-color: #121212;
+      color: #ffffff;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      margin: 0;
+      padding: 20px;
+      box-sizing: border-box;
+    }
+
+    h1 {
+      margin-bottom: 8px;
+      font-size: 24px;
+      text-align: center;
+    }
+
+    p.subtitle {
+      color: #a0a0a0;
+      margin-top: 0;
+      margin-bottom: 20px;
+      text-align: center;
+    }
+
+    .container {
+      display: flex;
+      gap: 20px;
+      flex-wrap: wrap;
+      justify-content: center;
+      align-items: flex-start;
+    }
+
+    .webcam-card, .avatar-card, .debug-card {
+      background: #1e1e1e;
+      border-radius: 12px;
+      padding: 16px;
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+
+    .video-wrap {
+      position: relative;
+      width: 320px;
+      height: 240px;
+      border-radius: 8px;
+      overflow: hidden;
+      background-color: #000;
+    }
+
+    .video-wrap video,
+    .video-wrap canvas {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 320px;
+      height: 240px;
+      transform: scaleX(-1); /* Mirror camera display */
+    }
+
+    .video-wrap canvas {
+      pointer-events: none;
+    }
+
+    #kiosk-mock {
+      width: 320px;
+      height: 240px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      font-size: 22px;
+      font-weight: bold;
+      color: white;
+      border-radius: 8px;
+      transition: background-color 0.3s ease, transform 0.2s ease;
+      text-align: center;
+      padding: 10px;
+      box-sizing: border-box;
+    }
+
+    /* Avatar State Styles */
+    .vtuber { background: linear-gradient(135deg, #ff4081, #7c4dff); }
+    .classic { background: linear-gradient(135deg, #00838f, #00acc1); }
+    .mecha { background: linear-gradient(135deg, #2e7d32, #66bb6a); }
+
+    .status-badge {
+      margin-top: 12px;
+      font-size: 14px;
+      background: rgba(255, 255, 255, 0.2);
+      padding: 4px 12px;
+      border-radius: 12px;
+      text-align: center;
+    }
+
+    .status-badge.error {
+      background: rgba(244, 67, 54, 0.25);
+      color: #ff8a80;
+    }
+
+    .retry-btn {
+      margin-top: 10px;
+      background: #ff5252;
+      border: none;
+      color: white;
+      padding: 6px 16px;
+      border-radius: 8px;
+      cursor: pointer;
+      font-size: 13px;
+      display: none;
+    }
+
+    .retry-btn.visible { display: inline-block; }
+
+    /* Debug panel */
+    .debug-card {
+      width: 260px;
+      height: 240px;
+      box-sizing: border-box;
+      align-items: stretch;
+      font-size: 13px;
+      gap: 6px;
+    }
+
+    .debug-row {
+      display: flex;
+      justify-content: space-between;
+      color: #cccccc;
+      margin-bottom: 4px;
+    }
+
+    .debug-row strong { color: #fff; }
+
+    .stability-track {
+      width: 100%;
+      height: 8px;
+      background: #333;
+      border-radius: 4px;
+      overflow: hidden;
+      margin: 4px 0 10px 0;
+    }
+
+    #stability-fill {
+      height: 100%;
+      width: 0%;
+      background: linear-gradient(90deg, #00acc1, #66bb6a);
+      transition: width 0.08s linear;
+    }
+
+    .candidate-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 6px;
+    }
+
+    .candidate-label {
+      width: 90px;
+      font-size: 12px;
+      color: #cccccc;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .candidate-track {
+      flex: 1;
+      height: 6px;
+      background: #333;
+      border-radius: 3px;
+      overflow: hidden;
+    }
+
+    .candidate-fill {
+      height: 100%;
+      background: #7c4dff;
+    }
+
+    .candidate-score {
+      width: 34px;
+      font-size: 11px;
+      color: #999;
+      text-align: right;
+    }
+
+    label.toggle {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 12px;
+      color: #cccccc;
+      margin-top: auto;
+      cursor: pointer;
+    }
+
+    .gesture-guide, .manual-controls {
+      margin-top: 24px;
+      background: #1e1e1e;
+      padding: 16px 24px;
+      border-radius: 12px;
+      max-width: 680px;
+      width: 100%;
+      box-sizing: border-box;
+    }
+
+    .gesture-guide ul {
+      margin: 8px 0 0 0;
+      padding-left: 20px;
+      color: #cccccc;
+    }
+
+    .gesture-guide li {
+      margin-bottom: 6px;
+    }
+
+    .manual-controls p {
+      color: #a0a0a0;
+      margin: 0 0 10px 0;
+      font-size: 13px;
+    }
+
+    .manual-controls .buttons {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+
+    .manual-controls button {
+      background: #2a2a2a;
+      border: 1px solid #3a3a3a;
+      color: #fff;
+      padding: 8px 14px;
+      border-radius: 8px;
+      cursor: pointer;
+      font-size: 14px;
+    }
+
+    .manual-controls button:hover {
+      background: #333;
+    }
+  </style>
+
+  <!-- MediaPipe Vision Bundle CDN — pinned to 1.0.1 (do not use @latest: it can silently
+       ship breaking API changes to this prototype). Verified reachable at publish time. -->
+  <script type="module">
+    import {
+      GestureRecognizer,
+      FilesetResolver,
+      DrawingUtils,
+    } from "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@1.0.1/vision_bundle.mjs";
+
+    // ---- Tunables (adjust here while testing detection quality) ----
+    const MODEL_URL =
+      "https://storage.googleapis.com/mediapipe-models/gesture_recognizer/gesture_recognizer/float16/1/gesture_recognizer.task";
+    const CAMERA_CONSTRAINTS = { width: { ideal: 640 }, height: { ideal: 480 } };
+    const MIN_CONFIDENCE = 0.65; // ignore classifications below this score
+    const STABILITY_FRAMES = 6; // consecutive agreeing frames required before swapping (~150-250ms)
+    const HAND_DETECTION_CONFIDENCE = 0.6;
+    const HAND_PRESENCE_CONFIDENCE = 0.6;
+    const TRACKING_CONFIDENCE = 0.6;
+
+    const MOCK_AVATARS = {
+      Victory: { id: "agent_vtuber_01", label: "VTuber Clerk", emoji: "✌️", class: "vtuber" },
+      Open_Palm: { id: "agent_classic_01", label: "Classic Clerk", emoji: "🖐️", class: "classic" },
+      Thumb_Up: { id: "agent_mecha_01", label: "Cyber Robot", emoji: "👍", class: "mecha" },
+    };
+
+    let gestureRecognizer = null;
+    let video = null;
+    let overlay = null;
+    let canvasCtx = null;
+    let drawingUtils = null;
+    let currentAgent = "agent_classic_01";
+    let rafId = null;
+    let lastTimestampMs = 0;
+    let showLandmarks = true;
+
+    // Temporal debounce state
+    let pendingGesture = null;
+    let pendingCount = 0;
+
+    // FPS tracking
+    let frameCount = 0;
+    let fpsWindowStart = performance.now();
+
+    // Runtime-error tracking — recognizeForVideo() can throw *after* successful
+    // init (observed WASM traps under GPU/shared-image edge cases), so a single
+    // try/catch around init is not enough; the predict loop needs its own guard.
+    let consecutiveErrors = 0;
+    const MAX_CONSECUTIVE_ERRORS = 5;
+
+    const els = {};
+
+    function cacheElements() {
+      els.statusText = document.getElementById("status-text");
+      els.retryBtn = document.getElementById("retry-btn");
+      els.kioskMock = document.getElementById("kiosk-mock");
+      els.currentGesture = document.getElementById("current-gesture");
+      els.fpsValue = document.getElementById("fps-value");
+      els.stabilityFill = document.getElementById("stability-fill");
+      els.stabilityLabel = document.getElementById("stability-label");
+      els.candidateList = document.getElementById("candidate-list");
+      els.landmarkToggle = document.getElementById("landmark-toggle");
+      els.minConfidenceLabel = document.getElementById("min-confidence-label");
+    }
+
+    function setStatus(text, isError = false) {
+      els.statusText.textContent = text;
+      els.statusText.classList.toggle("error", isError);
+      els.retryBtn.classList.toggle("visible", isError);
+    }
+
+    async function initGestureTracking() {
+      els.retryBtn.classList.remove("visible");
+      pauseLoop();
+      video?.srcObject?.getTracks().forEach((track) => track.stop());
+      gestureRecognizer?.close();
+      gestureRecognizer = null;
+      consecutiveErrors = 0;
+
+      if (!window.isSecureContext) {
+        setStatus(
+          "Camera requires HTTPS or localhost. Serve this file over http://localhost, not file://.",
+          true
+        );
+        return;
+      }
+      if (!navigator.mediaDevices?.getUserMedia) {
+        setStatus("getUserMedia is not available in this browser.", true);
+        return;
+      }
+
+      try {
+        setStatus("Loading MediaPipe model...");
+        const vision = await FilesetResolver.forVisionTasks(
+          "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@1.0.1/wasm"
+        );
+        gestureRecognizer = await createRecognizer(vision);
+
+        setStatus("Requesting webcam access...");
+        const stream = await navigator.mediaDevices.getUserMedia({ video: CAMERA_CONSTRAINTS });
+
+        video.srcObject = stream;
+        video.addEventListener(
+          "loadeddata",
+          () => {
+            overlay.width = video.videoWidth;
+            overlay.height = video.videoHeight;
+            setStatus("Gesture detection active");
+            resumeLoop();
+          },
+          { once: true }
+        );
+      } catch (err) {
+        console.error("Gesture tracking init failed:", err);
+        setStatus(describeError(err), true);
+      }
+    }
+
+    async function createRecognizer(vision) {
+      const baseConfig = {
+        runningMode: "VIDEO",
+        numHands: 1,
+        minHandDetectionConfidence: HAND_DETECTION_CONFIDENCE,
+        minHandPresenceConfidence: HAND_PRESENCE_CONFIDENCE,
+        minTrackingConfidence: TRACKING_CONFIDENCE,
+      };
+      try {
+        return await GestureRecognizer.createFromOptions(vision, {
+          ...baseConfig,
+          baseOptions: { modelAssetPath: MODEL_URL, delegate: "GPU" },
+        });
+      } catch (err) {
+        console.warn("GPU delegate failed, falling back to CPU:", err);
+        return await GestureRecognizer.createFromOptions(vision, {
+          ...baseConfig,
+          baseOptions: { modelAssetPath: MODEL_URL, delegate: "CPU" },
+        });
+      }
+    }
+
+    function describeError(err) {
+      if (err?.name === "NotAllowedError") {
+        return "Camera permission denied. Allow camera access and retry.";
+      }
+      if (err?.name === "NotFoundError") {
+        return "No camera found on this device.";
+      }
+      if (err?.name === "NotReadableError") {
+        return "Camera is already in use by another application.";
+      }
+      return `Failed to start: ${err?.message || err}. Check console and retry.`;
+    }
+
+    function predictLoop() {
+      rafId = requestAnimationFrame(predictLoop);
+
+      if (!gestureRecognizer || video.readyState < 2) return;
+
+      const now = Math.max(performance.now(), lastTimestampMs + 1);
+      lastTimestampMs = now;
+
+      let results;
+      try {
+        results = gestureRecognizer.recognizeForVideo(video, now);
+        consecutiveErrors = 0;
+      } catch (err) {
+        consecutiveErrors++;
+        console.error("recognizeForVideo failed:", err);
+        if (consecutiveErrors >= MAX_CONSECUTIVE_ERRORS) {
+          pauseLoop();
+          setStatus("Gesture model stopped responding. Click Retry to restart it.", true);
+        }
+        return;
+      }
+
+      drawLandmarks(results);
+      handleGestureResult(results);
+      trackFps();
+    }
+
+    function handleGestureResult(results) {
+      const candidates = results.gestures.length > 0 ? results.gestures[0] : [];
+      renderCandidates(candidates);
+
+      const top = candidates[0];
+      const name = top?.categoryName;
+      const score = top?.score ?? 0;
+
+      const isConfident = name && score >= MIN_CONFIDENCE && MOCK_AVATARS[name];
+
+      if (!isConfident) {
+        pendingGesture = null;
+        pendingCount = 0;
+        updateStabilityUI(0);
+        return;
+      }
+
+      if (name === pendingGesture) {
+        pendingCount++;
+      } else {
+        pendingGesture = name;
+        pendingCount = 1;
+      }
+
+      updateStabilityUI(pendingCount / STABILITY_FRAMES);
+
+      if (pendingCount >= STABILITY_FRAMES && MOCK_AVATARS[name].id !== currentAgent) {
+        updateMockAvatar(MOCK_AVATARS[name]);
+        pendingCount = 0;
+      }
+    }
+
+    function renderCandidates(candidates) {
+      if (candidates.length === 0) {
+        els.candidateList.innerHTML = '<div class="debug-row">No hand detected</div>';
+        return;
+      }
+      const top3 = candidates.slice(0, 3);
+      els.candidateList.innerHTML = top3
+        .map((c) => {
+          const pct = Math.round(c.score * 100);
+          return `
+            <div class="candidate-row">
+              <span class="candidate-label">${c.categoryName}</span>
+              <span class="candidate-track"><span class="candidate-fill" style="width:${pct}%"></span></span>
+              <span class="candidate-score">${pct}%</span>
+            </div>`;
+        })
+        .join("");
+    }
+
+    function updateStabilityUI(fraction) {
+      const pct = Math.min(100, Math.max(0, fraction * 100));
+      els.stabilityFill.style.width = `${pct}%`;
+      els.stabilityLabel.textContent = pendingGesture ? `Locking: ${pendingGesture}` : "Stability";
+    }
+
+    function drawLandmarks(results) {
+      canvasCtx.save();
+      canvasCtx.clearRect(0, 0, overlay.width, overlay.height);
+      if (showLandmarks) {
+        for (const landmarks of results.landmarks) {
+          drawingUtils.drawConnectors(landmarks, GestureRecognizer.HAND_CONNECTIONS, {
+            color: "#00e5ff",
+            lineWidth: 3,
+          });
+          drawingUtils.drawLandmarks(landmarks, { color: "#ff4081", lineWidth: 1, radius: 3 });
+        }
+      }
+      canvasCtx.restore();
+    }
+
+    function trackFps() {
+      frameCount++;
+      const elapsed = performance.now() - fpsWindowStart;
+      if (elapsed >= 1000) {
+        els.fpsValue.textContent = Math.round((frameCount * 1000) / elapsed);
+        frameCount = 0;
+        fpsWindowStart = performance.now();
+      }
+    }
+
+    function updateMockAvatar(avatarData) {
+      currentAgent = avatarData.id;
+
+      els.kioskMock.innerHTML = `<div>${avatarData.emoji}</div><div>${avatarData.label}</div>`;
+      els.kioskMock.className = avatarData.class;
+      els.currentGesture.textContent = `Active ID: ${avatarData.id}`;
+
+      console.log("Agent swapped to:", avatarData.id);
+    }
+
+    function pauseLoop() {
+      if (rafId !== null) {
+        cancelAnimationFrame(rafId);
+        rafId = null;
+      }
+    }
+
+    function resumeLoop() {
+      if (rafId === null && gestureRecognizer && video?.readyState >= 2) {
+        predictLoop();
+      }
+    }
+
+    function cleanup() {
+      pauseLoop();
+      video?.srcObject?.getTracks().forEach((track) => track.stop());
+      gestureRecognizer?.close();
+      gestureRecognizer = null;
+    }
+
+    function wireManualOverrides() {
+      document.querySelectorAll("[data-gesture]").forEach((btn) => {
+        btn.addEventListener("click", () => {
+          const avatar = MOCK_AVATARS[btn.dataset.gesture];
+          if (avatar) updateMockAvatar(avatar);
+        });
+      });
+    }
+
+    window.addEventListener("DOMContentLoaded", () => {
+      cacheElements();
+      video = document.getElementById("webcam");
+      overlay = document.getElementById("overlay");
+      canvasCtx = overlay.getContext("2d");
+      drawingUtils = new DrawingUtils(canvasCtx);
+
+      els.minConfidenceLabel.textContent = `${Math.round(MIN_CONFIDENCE * 100)}%`;
+
+      els.landmarkToggle.checked = showLandmarks;
+      els.landmarkToggle.addEventListener("change", (e) => {
+        showLandmarks = e.target.checked;
+      });
+
+      els.retryBtn.addEventListener("click", initGestureTracking);
+
+      wireManualOverrides();
+
+      document.addEventListener("visibilitychange", () => {
+        if (document.hidden) pauseLoop();
+        else resumeLoop();
+      });
+      window.addEventListener("pagehide", cleanup);
+
+      initGestureTracking();
+    });
+  </script>
+</head>
+<body>
+
+  <h1>Konbini AI Kiosk — Touchless Avatar Swap Test</h1>
+  <p class="subtitle">Standalone local gesture detection prototype using MediaPipe Tasks Vision</p>
+
+  <div class="container">
+    <!-- Camera View -->
+    <div class="webcam-card">
+      <div class="video-wrap">
+        <video id="webcam" autoplay playsinline muted></video>
+        <canvas id="overlay"></canvas>
+      </div>
+      <div id="status-text" class="status-badge">Initializing...</div>
+      <button id="retry-btn" class="retry-btn">Retry</button>
+    </div>
+
+    <!-- Mock Avatar Output -->
+    <div class="avatar-card">
+      <div id="kiosk-mock" class="classic">
+        <div>🖐️</div>
+        <div>Classic Clerk</div>
+      </div>
+      <div id="current-gesture" class="status-badge">Active ID: agent_classic_01</div>
+    </div>
+
+    <!-- Debug Panel -->
+    <div class="debug-card">
+      <div class="debug-row"><span>FPS</span><strong id="fps-value">0</strong></div>
+      <div class="debug-row"><span id="stability-label">Stability</span></div>
+      <div class="stability-track"><div id="stability-fill"></div></div>
+      <div id="candidate-list">
+        <div class="debug-row">No hand detected</div>
+      </div>
+      <label class="toggle">
+        <input type="checkbox" id="landmark-toggle" />
+        Show hand landmarks
+      </label>
+    </div>
+  </div>
+
+  <div class="gesture-guide">
+    <h3>Supported Hand Gestures:</h3>
+    <ul>
+      <li><strong>Victory / Peace Sign (✌️):</strong> Swaps avatar to <code>agent_vtuber_01</code> (VTuber Clerk)</li>
+      <li><strong>Open Palm (🖐️):</strong> Swaps avatar to <code>agent_classic_01</code> (Classic Clerk)</li>
+      <li><strong>Thumbs Up (👍):</strong> Swaps avatar to <code>agent_mecha_01</code> (Cyber Robot)</li>
+    </ul>
+    <p style="color:#888; font-size: 13px; margin-top: 12px; margin-bottom: 0;">
+      A gesture must be classified above <span id="min-confidence-label">65%</span> confidence
+      and held for several consecutive frames before the avatar swaps — this filters out
+      one-frame misreads and flicker between two similar gestures.
+    </p>
+  </div>
+
+  <div class="manual-controls">
+    <p>Manual override — test the avatar-swap UI and state logic without a camera or gesture:</p>
+    <div class="buttons">
+      <button data-gesture="Victory">✌️ Force VTuber Clerk</button>
+      <button data-gesture="Open_Palm">🖐️ Force Classic Clerk</button>
+      <button data-gesture="Thumb_Up">👍 Force Cyber Robot</button>
+    </div>
+  </div>
+
+</body>
+</html>
