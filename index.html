@@ -279,6 +279,21 @@
     const SWIPE_WINDOW_MS = 500; // how far back we look when measuring that travel
     const SWIPE_MIN_DURATION_MS = 120; // minimum time span covered, so single-frame jitter can't trigger it
     const SWIPE_COOLDOWN_MS = 700; // minimum gap between two swipe triggers
+    // Fraction of frame-to-frame steps inside the window that must agree with
+    // the net direction. Raw net displacement alone can't tell a clean swipe
+    // apart from hand jitter/tremor that happens to drift — e.g. left-right-left
+    // with a small net rightward creep would pass a distance-only check. This
+    // rejects that: a real swipe is (mostly) monotonic, jitter isn't.
+    const SWIPE_MIN_CONSISTENCY = 0.7;
+    // Exponential smoothing applied to palm x before it's tracked (0 = no
+    // smoothing/raw and jittery, 1 = ignore new samples entirely). Cuts
+    // per-frame landmark noise without adding much lag to a real swipe.
+    const SWIPE_SMOOTHING_ALPHA = 0.4;
+    // Consecutive no-hand frames tolerated before we give up on an in-progress
+    // swipe. Fast motion is exactly when MediaPipe is most likely to briefly
+    // lose tracking (motion blur), so without this a real swipe could get
+    // wiped out by one dropped frame right when it matters most.
+    const SWIPE_MAX_MISSED_FRAMES = 3;
 
     // Swipe right/left cycles forward/backward through this order.
     const AVATAR_CYCLE = [
@@ -298,7 +313,9 @@
     let showLandmarks = true;
 
     // Swipe tracking state
-    let swipeHistory = []; // { t, x } palm-center samples, oldest first
+    let swipeHistory = []; // { t, x } smoothed palm-center samples, oldest first
+    let smoothedPalmX = null;
+    let missedHandFrames = 0;
     let lastSwipeAt = 0;
     let currentAvatarIndex = 0;
     let swipeIndicatorTimer = null;
@@ -341,6 +358,8 @@
       gestureRecognizer = null;
       consecutiveErrors = 0;
       swipeHistory = [];
+      smoothedPalmX = null;
+      missedHandFrames = 0;
       lastSwipeAt = 0;
 
       if (!window.isSecureContext) {
@@ -468,11 +487,37 @@
     }
 
     // Pure function — no DOM/module state — so it can be unit-tested standalone.
+    // Fraction of consecutive-sample steps (within the same window used for the
+    // distance check) that move the same direction as the net displacement.
+    // Fewer than 3 points can't meaningfully judge a "path", so it passes
+    // through unpenalized (1) rather than blocking low-sample-rate detection.
+    function directionalConsistency(history, now, windowMs) {
+      const windowStart = now - windowMs;
+      const inWindow = history.filter((p) => p.t >= windowStart);
+      if (inWindow.length < 3) return 1;
+
+      const net = inWindow[inWindow.length - 1].x - inWindow[0].x;
+      if (net === 0) return 0;
+      const sign = Math.sign(net);
+
+      let agreeing = 0;
+      let total = 0;
+      for (let i = 1; i < inWindow.length; i++) {
+        const step = inWindow[i].x - inWindow[i - 1].x;
+        if (step === 0) continue;
+        total++;
+        if (Math.sign(step) === sign) agreeing++;
+      }
+      return total === 0 ? 1 : agreeing / total;
+    }
+
+    // Pure function — no DOM/module state — so it can be unit-tested standalone.
     function detectSwipe(history, now, opts = {}) {
       const {
         minDistance = SWIPE_MIN_DISTANCE,
         windowMs = SWIPE_WINDOW_MS,
         minDurationMs = SWIPE_MIN_DURATION_MS,
+        minConsistency = SWIPE_MIN_CONSISTENCY,
       } = opts;
 
       if (history.length < 2) return null;
@@ -480,6 +525,7 @@
       const { dx, duration } = windowedDelta(history, now, windowMs);
       if (duration < minDurationMs) return null;
       if (Math.abs(dx) < minDistance) return null;
+      if (directionalConsistency(history, now, windowMs) < minConsistency) return null;
 
       // Landmark x is in the raw (unmirrored) camera frame, but the video/canvas
       // are displayed CSS-mirrored (scaleX(-1)) so it feels like a mirror. Raw x
@@ -490,12 +536,20 @@
 
     function handleSwipeTracking(results, now) {
       if (results.landmarks.length === 0) {
-        swipeHistory = [];
-        updateMovementUI(0, false);
+        missedHandFrames++;
+        if (missedHandFrames > SWIPE_MAX_MISSED_FRAMES) {
+          swipeHistory = [];
+          smoothedPalmX = null;
+          updateMovementUI(0, false);
+        }
         return;
       }
+      missedHandFrames = 0;
 
-      swipeHistory.push({ t: now, x: palmCenterX(results.landmarks[0]) });
+      const rawX = palmCenterX(results.landmarks[0]);
+      smoothedPalmX = smoothedPalmX === null ? rawX : smoothedPalmX + SWIPE_SMOOTHING_ALPHA * (rawX - smoothedPalmX);
+
+      swipeHistory.push({ t: now, x: smoothedPalmX });
       const cutoff = now - SWIPE_WINDOW_MS;
       swipeHistory = swipeHistory.filter((p) => p.t >= cutoff);
 
@@ -511,6 +565,7 @@
       if (direction) {
         lastSwipeAt = now;
         swipeHistory = [];
+        smoothedPalmX = null;
         cycleAvatar(direction);
         flashSwipeIndicator(direction);
       }
